@@ -129,7 +129,7 @@ const adjust = (cash, method, delta) =>
   isCard(method) ? cash : cash.map((c) => (c.id === method ? { ...c, amt: c.amt + delta } : c));
 
 const DEFAULT = {
-  v: 42,
+  v: 43,
   sync: { updatedAt: "", rev: 0 },
   biz: { name: "卡牌", invested: 0, recovered: 0, profit: 0, share: null, log: [] },
   sharedTx: [],
@@ -165,6 +165,7 @@ const DEFAULT = {
 // 使用者已明確同意把這份財務快照發布到 GitHub，供其他裝置一次性匯入。
 // publishedFinancialRev 會寫進本機資料；相同版本只套用一次，避免每次開啟都覆蓋手機後續修改。
 const PUBLISHED_FINANCIAL_REV = "2026-09-30-financial-snapshot-1";
+const PUBLISHED_PORTFOLIO_CLEANUP_REV = "2026-09-30-remove-two-custom-assets-1";
 const PUBLISHED_FINANCIAL_SNAPSHOT = {
   biz: {
     name: "卡牌", invested: 200000, recovered: 0, profit: 0, share: null,
@@ -332,6 +333,7 @@ const normalizeShared = (t) => {
 const migrateState = (st = {}) => {
   const priorV = Number(st.v || 0);
   const needsPublishedFinancialSnapshot = st.publishedFinancialRev !== PUBLISHED_FINANCIAL_REV;
+  const needsPublishedPortfolioCleanup = st.publishedPortfolioCleanupRev !== PUBLISHED_PORTFOLIO_CLEANUP_REV;
   let next = {
     ...DEFAULT,
     ...st,
@@ -360,6 +362,8 @@ const migrateState = (st = {}) => {
   // v39–v41 結構仍由 DEFAULT 以加法遷移；使用者授權發布的財務快照則依版本只套用一次。
   // 相同 ID 的已知資產與負債更新成快照值，手機上的其他自訂資料仍保留。
   if (needsPublishedFinancialSnapshot) next = applyPublishedFinancialSnapshot(next);
+  // 使用者要求移除剛新增的兩筆自訂標的；這個清理版本只會在每台裝置套用一次。
+  if (needsPublishedPortfolioCleanup) next = { ...next, portfolioAssets: [], publishedPortfolioCleanupRev: PUBLISHED_PORTFOLIO_CLEANUP_REV };
   return next;
 };
 
@@ -1003,6 +1007,7 @@ function App() {
   const loanTWD = Math.max(0, d.loans.reduce((a, x) => a + (x.cur === "USD" ? t2(x.amt) : x.amt), 0) - instDue) + cryptoLoanTWD;
   const biz = d.biz || { invested: 0, recovered: 0, profit: 0, log: [] };
   const bizOut = Number(biz.invested || 0) - Number(biz.recovered || 0);
+  const bizEquity = bizOut + Number(biz.profit || 0);
   // 卡牌事業獨立管理，不計入個人總資產或淨資產。
   const assetTWD = cashTWD + invTWD;
   const net = assetTWD - loanTWD - totalDue;
@@ -1770,16 +1775,16 @@ function App() {
           <div style={{ ...S.card, padding: "15px 17px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
               <div style={S.lbl}>事業 · {biz.name}</div>
-              <div style={{ fontSize: 15 }}>{nf(bizOut)}</div>
+              <div style={{ textAlign: "right" }}><div style={{ color: C.dim, fontSize: 10 }}>股權資金</div><div style={{ fontSize: 17, fontWeight: 850 }}>{nf(bizEquity)}</div></div>
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginBottom: 12 }}>
               <div style={{ padding: "11px 12px", background: C.bg, borderRadius: 8 }}>
-                <div style={{ color: C.dim, fontSize: 10.5 }}>在外資金</div>
+                <div style={{ color: C.dim, fontSize: 10.5 }}>在外本金</div>
                 <div style={{ fontSize: 18, color: bizOut > 0 ? "#C08A2E" : C.dim, marginTop: 3 }}>{nf(bizOut)}</div>
               </div>
               <div style={{ padding: "11px 12px", background: C.bg, borderRadius: 8 }}>
-                <div style={{ color: C.dim, fontSize: 10.5 }}>累計毛利</div>
+                <div style={{ color: C.dim, fontSize: 10.5 }}>累計獲利</div>
                 <div style={{ fontSize: 18, color: biz.profit > 0 ? C.inc : C.dim, marginTop: 3 }}>{nf(biz.profit)}</div>
               </div>
             </div>
@@ -1798,19 +1803,22 @@ function App() {
                 style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 8, padding: "10px" }}>投入</button>
               <button onClick={() => setModal({ type: "bizOut", amount: "", profit: "", to: d.cash.find((c) => !c.earmark && !c.excluded && c.cur === "TWD")?.id })}
                 style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 8, padding: "10px" }}>回收</button>
+              <button onClick={() => setModal({ type: "bizProfit", amount: "" })}
+                style={{ ...S.chip(false, C.inc), flex: 1, borderRadius: 8, padding: "10px" }}>獲利</button>
             </div>
 
             {(biz.log || []).length > 0 && (
               <div style={{ marginTop: 6 }}>
-                {biz.log.slice(0, 6).map((l) => (
-                  <div key={l.id} style={S.row}>
+                {biz.log.slice(0, 6).map((l) => {
+                  const isIn = l.type === "in", isProfit = l.type === "profit";
+                  return <div key={l.id} style={S.row}>
                     <div>
-                      <div style={{ fontSize: 13 }}>{l.type === "in" ? "投入" : "回收"}{l.note ? ` · ${l.note}` : ""}</div>
-                      <div style={S.sub}>{l.date.slice(5).replace("-", "/")}{l.profit ? ` · 毛利 ${nf(l.profit)}` : ""}</div>
+                      <div style={{ fontSize: 13 }}>{isIn ? "投入" : isProfit ? "獲利" : "回收"}{l.note ? ` · ${l.note}` : ""}</div>
+                      <div style={S.sub}>{l.date.slice(5).replace("-", "/")}{!isProfit && l.profit ? ` · 含獲利 ${nf(l.profit)}` : ""}</div>
                     </div>
-                    <div style={{ fontSize: 14, color: l.type === "in" ? "#C08A2E" : C.inc }}>{l.type === "in" ? "−" : "+"}{nf(l.amount)}</div>
-                  </div>
-                ))}
+                    <div style={{ fontSize: 14, color: isIn ? "#C08A2E" : C.inc }}>{isIn ? "−" : "+"}{nf(l.amount)}</div>
+                  </div>;
+                })}
               </div>
             )}
           </div>
@@ -1934,7 +1942,7 @@ function App() {
       {modal && (
         <div onClick={() => setModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.68)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 25 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: C.card, width: "100%", maxWidth: 480, maxHeight: "92vh", overflowY: "auto", borderRadius: "24px 24px 0 0", padding: "20px 17px 26px", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif" }}>
-            <div style={{ ...S.lbl, marginBottom: 15 }}>{{ move: "資金轉帳", transfer: "轉進卡費帳戶", pay: "繳卡費", loanPay: "繳信貸", editDebt: "調整卡費／分期", topup: "存入共同基金", settle: "結算墊款", bizIn: "投入事業", bizOut: "從事業回收", asset: modal.id ? "編輯投資標的" : "新增投資標的", addCoin: "新增 Crypto", account: modal.id ? "編輯帳戶" : "新增帳戶", confirm: "確認", backup: "匯出備份", restore: "匯入備份", cloud: "Google 試算表同步" }[modal.type]}</div>
+            <div style={{ ...S.lbl, marginBottom: 15 }}>{{ move: "資金轉帳", transfer: "轉進卡費帳戶", pay: "繳卡費", loanPay: "繳信貸", editDebt: "調整卡費／分期", topup: "存入共同基金", settle: "結算墊款", bizIn: "投入事業", bizOut: "從事業回收", bizProfit: "登記事業獲利", asset: modal.id ? "編輯投資標的" : "新增投資標的", addCoin: "新增 Crypto", account: modal.id ? "編輯帳戶" : "新增帳戶", confirm: "確認", backup: "匯出備份", restore: "匯入備份", cloud: "Google 試算表同步" }[modal.type]}</div>
 
             {modal.type === "confirm" ? (
               <>
@@ -2300,17 +2308,14 @@ function App() {
                       style={S.chip((modal.type === "bizIn" ? modal.from : modal.to) === c.id, C.ink)}>{c.name} · {nf(c.amt)}</button>
                   ))}
                 </div>
-                {modal.type === "bizOut" && (
-                  <>
-                    <div style={{ ...S.lbl, marginBottom: 8 }}>其中毛利（純回本填 0）</div>
-                    <input inputMode="decimal" placeholder="0" value={modal.profit || ""} onChange={(e) => setModal({ ...modal, profit: e.target.value })}
-                      style={{ ...S.inp, marginBottom: 15 }} />
-                  </>
-                )}
                 <div style={{ fontSize: 11.5, color: C.dim, marginBottom: 15, lineHeight: 1.8 }}>
-                  目前在外 {nf(bizOut)}
+                  目前股權資金 {nf(bizEquity)}
                 </div>
               </>
+            ) : modal.type === "bizProfit" ? (
+              <div style={{ fontSize: 11.5, color: C.dim, marginBottom: 15, lineHeight: 1.8 }}>
+                這筆獲利會留在卡牌事業內，股權資金會從 {nf(bizEquity)} 增加。之後若把錢領回，請另外按「回收」。
+              </div>
             ) : modal.type === "topup" ? (
               <div style={{ fontSize: 12, color: C.dim, marginBottom: 15, lineHeight: 1.8 }}>
                 基金目前 {nf(fund?.amt || 0)}
@@ -2401,6 +2406,10 @@ function App() {
               <button onClick={() => {
                 const amt = parseFloat(modal.amount);
                 if (!(amt > 0)) return;
+                if (modal.type === "bizProfit") {
+                  save({ ...d, biz: { ...biz, profit: Number(biz.profit || 0) + amt, log: [{ id: "b" + Date.now(), type: "profit", amount: amt, profit: amt, date: today(), note: "" }, ...(biz.log || [])] } });
+                  setModal(null); return;
+                }
                 if (modal.type === "bizIn") {
                   if (!modal.from) return;
                   save({ ...d, cash: d.cash.map((c) => (c.id === modal.from ? { ...c, amt: c.amt - amt } : c)),
@@ -2409,9 +2418,8 @@ function App() {
                 }
                 if (modal.type === "bizOut") {
                   if (!modal.to) return;
-                  const pf = parseFloat(modal.profit) || 0;
                   save({ ...d, cash: d.cash.map((c) => (c.id === modal.to ? { ...c, amt: c.amt + amt } : c)),
-                    biz: { ...biz, recovered: biz.recovered + amt, profit: biz.profit + pf, log: [{ id: "b" + Date.now(), type: "out", amount: amt, profit: pf, date: today(), note: "" }, ...(biz.log || [])] } });
+                    biz: { ...biz, recovered: biz.recovered + amt, log: [{ id: "b" + Date.now(), type: "out", amount: amt, profit: 0, date: today(), note: "" }, ...(biz.log || [])] } });
                   setModal(null); return;
                 }
                 if (modal.type === "topup") {
