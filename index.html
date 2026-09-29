@@ -28,6 +28,7 @@ if (window.__MONEY_APP_BUILD_TEMPLATE__) window.location.replace('index.html');
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone@7/babel.min.js" crossorigin></script>
+<script src="data/us-stocks.js"></script>
 </head>
 <body>
 <div id="root"><div class="boot">載入中…</div></div>
@@ -68,15 +69,52 @@ const C = {
   out: "#FF6B6B", inc: "#4FD1A1", amber: "#F5B84B", ink: "#5B7CFA", teal: "#45C7B2", purple: "#A98AF4",
 };
 
-const CATS = [
-  { k: "food", n: "吃飯", c: "#6C8CFF" }, { k: "car", n: "交通加油", c: "#45C7B2" }, { k: "life", n: "生活日用", c: "#F5B84B" },
-  { k: "fun", n: "娛樂", c: "#A98AF4" }, { k: "shop", n: "購物", c: "#FF6B7B" }, { k: "social", n: "人情", c: "#4FD1A1" }, { k: "pet", n: "寵物", c: "#6EB2E8" }, { k: "other", n: "其他", c: "#77808D" },
+const CATEGORY_BLUEPRINT = [
+  { type: "expense", id: "food", name: "餐飲", color: "#6C8CFF", children: [["food_breakfast", "早餐"], ["food_lunch", "午餐"], ["food_dinner", "晚餐"], ["food_drink", "咖啡飲料"], ["food_snack", "點心宵夜"], ["food_delivery", "外送"], ["food_social", "聚餐"], ["food_grocery", "食材生鮮"]] },
+  { type: "expense", id: "car", name: "交通", color: "#45C7B2", children: [["car_fuel", "加油充電"], ["car_parking", "停車"], ["car_toll", "ETC過路費"], ["car_taxi", "計程車"], ["car_transit", "捷運公車"], ["car_rail", "火車高鐵"], ["car_flight", "機票"], ["car_maintain", "保養維修"], ["car_insurance", "車險牌照"]] },
+  { type: "expense", id: "life", name: "居家生活", color: "#F5B84B", children: [["life_rent", "房租房貸"], ["life_management", "管理費"], ["life_water", "水費"], ["life_power", "電費"], ["life_gas", "瓦斯"], ["life_phone", "電信網路"], ["life_daily", "生活用品"], ["life_furniture", "家具家電"], ["life_repair", "修繕"], ["life_clean", "清潔洗衣"]] },
+  { type: "expense", id: "shop", name: "購物", color: "#FF6B7B", children: [["shop_clothes", "服飾"], ["shop_shoes", "鞋包"], ["shop_tech", "3C電子"], ["shop_beauty", "美妝保養"], ["shop_books", "書籍雜誌"], ["shop_online", "網購"], ["shop_gift", "送禮"], ["shop_other", "其他購物"]] },
+  { type: "expense", id: "fun", name: "娛樂休閒", color: "#A98AF4", children: [["fun_movie", "電影"], ["fun_stream", "影音串流"], ["fun_game", "遊戲"], ["fun_ktv", "唱歌聚會"], ["fun_show", "展覽表演"], ["fun_travel", "旅遊"], ["fun_sport", "運動活動"], ["fun_hobby", "興趣收藏"]] },
+  { type: "expense", id: "health", name: "醫療健康", color: "#E06C75", children: [["health_clinic", "診所醫院"], ["health_medicine", "藥品"], ["health_check", "健康檢查"], ["health_dental", "牙科"], ["health_eye", "眼科眼鏡"], ["health_insurance", "醫療保險"], ["health_fitness", "健身"], ["health_care", "保健品"]] },
+  { type: "expense", id: "learn", name: "學習成長", color: "#61AFEF", children: [["learn_course", "課程"], ["learn_book", "教材書籍"], ["learn_exam", "考試證照"], ["learn_language", "語言學習"], ["learn_software", "軟體工具"], ["learn_subscription", "知識訂閱"]] },
+  { type: "expense", id: "social", name: "人情社交", color: "#4FD1A1", children: [["social_red", "紅包"], ["social_party", "聚會請客"], ["social_wedding", "婚喪喜慶"], ["social_parent", "孝親"], ["social_donate", "捐款"], ["social_gift", "人情禮物"]] },
+  { type: "expense", id: "pet", name: "寵物", color: "#6EB2E8", children: [["pet_food", "飼料罐頭"], ["pet_medical", "醫療"], ["pet_beauty", "美容洗澡"], ["pet_supply", "用品玩具"], ["pet_boarding", "住宿保母"], ["pet_insurance", "寵物保險"]] },
+  { type: "expense", id: "family", name: "家庭育兒", color: "#D19A66", children: [["family_childcare", "育兒托育"], ["family_tuition", "學費"], ["family_parent", "長輩照護"], ["family_allowance", "家庭零用"], ["family_activity", "家庭活動"]] },
+  { type: "expense", id: "finance", name: "財務費用", color: "#C08A2E", children: [["finance_tax", "稅金"], ["finance_fee", "銀行手續費"], ["finance_interest", "貸款利息"], ["finance_fx", "匯兌費用"], ["finance_card_fee", "信用卡年費"], ["finance_invest_fee", "投資手續費"], ["finance_insurance", "其他保險"]] },
+  { type: "expense", id: "work", name: "工作事業", color: "#56B6C2", children: [["work_transport", "工作交通"], ["work_meal", "工作餐費"], ["work_tool", "設備工具"], ["work_software", "商用軟體"], ["work_advance", "代墊費用"]] },
+  { type: "expense", id: "other", name: "其他支出", color: "#77808D", children: [["other_cash", "現金差額"], ["other_lost", "遺失損失"], ["other_fine", "罰款"], ["other_adjust", "帳務調整"], ["other_unknown", "未分類"], ["other_misc", "其他"]] },
+
+  { type: "income", id: "income_salary", name: "薪資收入", color: "#4FD1A1", children: [["base", "底薪"], ["bonus", "成交獎金"], ["income_overtime", "加班費"], ["income_allowance", "津貼補助"], ["income_year_bonus", "年終獎金"]] },
+  { type: "income", id: "income_business", name: "工作接案", color: "#45C7B2", children: [["income_commission", "佣金"], ["income_freelance", "接案"], ["income_sales", "銷售收入"], ["income_parttime", "兼職"], ["income_creator", "創作收入"]] },
+  { type: "income", id: "income_investment", name: "投資收入", color: "#6C8CFF", children: [["income_dividend", "股息配息"], ["income_interest", "利息"], ["income_capital_gain", "已實現損益"], ["income_rent", "租金"], ["income_crypto", "加密收益"]] },
+  { type: "income", id: "income_refund", name: "退款回饋", color: "#A98AF4", children: [["income_reimburse", "費用報銷"], ["income_refund_item", "消費退款"], ["income_cashback", "現金回饋"], ["income_claim", "保險理賠"], ["income_tax_refund", "退稅"]] },
+  { type: "income", id: "other_in", name: "其他收入", color: "#77808D", children: [["income_gift", "贈與紅包"], ["income_prize", "獎金中獎"], ["income_used_sale", "二手出售"], ["income_adjust", "帳務調整"], ["income_other", "其他"]] },
+
+  { type: "shared", id: "s_food", name: "共同餐飲", color: "#6C8CFF", children: [["s_food_meal", "正餐"], ["s_food_drink", "飲料咖啡"], ["s_food_delivery", "外送"], ["s_food_grocery", "共同食材"], ["s_food_party", "聚餐"]] },
+  { type: "shared", id: "s_date", name: "約會娛樂", color: "#A98AF4", children: [["s_date_movie", "電影"], ["s_date_activity", "活動"], ["s_date_shopping", "共同購物"], ["s_date_anniversary", "紀念日"]] },
+  { type: "shared", id: "s_trip", name: "共同旅遊", color: "#45C7B2", children: [["s_trip_transport", "交通"], ["s_trip_stay", "住宿"], ["s_trip_food", "餐飲"], ["s_trip_ticket", "門票"], ["s_trip_shopping", "旅遊購物"]] },
+  { type: "shared", id: "s_life", name: "共同生活", color: "#F5B84B", children: [["s_life_rent", "房租房貸"], ["s_life_bill", "水電瓦斯"], ["s_life_daily", "日用品"], ["s_life_home", "家具家電"], ["s_life_net", "網路訂閱"]] },
+  { type: "shared", id: "s_gift", name: "共同送禮", color: "#FF6B7B", children: [["s_gift_family", "家人禮物"], ["s_gift_friend", "朋友禮物"], ["s_gift_red", "共同紅包"], ["s_gift_donate", "共同捐款"]] },
+  { type: "shared", id: "s_transport", name: "共同交通", color: "#56B6C2", children: [["s_transport_fuel", "加油"], ["s_transport_parking", "停車"], ["s_transport_taxi", "計程車"], ["s_transport_transit", "大眾運輸"]] },
+  { type: "shared", id: "s_pet", name: "共同寵物", color: "#6EB2E8", children: [["s_pet_food", "飼料罐頭"], ["s_pet_medical", "醫療"], ["s_pet_supply", "用品"], ["s_pet_care", "美容照護"]] },
+  { type: "shared", id: "s_other", name: "其他共同", color: "#77808D", children: [["s_other_advance", "共同代墊"], ["s_other_adjust", "帳務調整"], ["s_other_misc", "其他"]] },
 ];
-const SHARED_CATS = [
-  { k: "s_food", n: "吃飯", c: "#6C8CFF" }, { k: "s_date", n: "約會", c: "#A98AF4" }, { k: "s_trip", n: "旅遊", c: "#45C7B2" },
-  { k: "s_gift", n: "禮物", c: "#FF6B7B" }, { k: "s_life", n: "生活", c: "#F5B84B" }, { k: "s_other", n: "其他", c: "#77808D" },
-];
-const INCOME_CATS = [{ k: "base", n: "底薪" }, { k: "bonus", n: "成交獎金" }, { k: "other_in", n: "其他" }];
+const DEFAULT_CATEGORY_DEFS = CATEGORY_BLUEPRINT.flatMap((parent) => [
+  { id: parent.id, name: parent.name, type: parent.type, color: parent.color, parentId: "", system: true, active: true },
+  ...parent.children.map(([id, name]) => ({ id, name, type: parent.type, color: parent.color, parentId: parent.id, system: true, active: true })),
+]);
+const CATS = DEFAULT_CATEGORY_DEFS.filter((x) => x.type === "expense" && !x.parentId).map((x) => ({ k: x.id, n: x.name, c: x.color }));
+const SHARED_CATS = DEFAULT_CATEGORY_DEFS.filter((x) => x.type === "shared" && !x.parentId).map((x) => ({ k: x.id, n: x.name, c: x.color }));
+const INCOME_CATS = DEFAULT_CATEGORY_DEFS.filter((x) => x.type === "income" && !x.parentId).map((x) => ({ k: x.id, n: x.name, c: x.color }));
+const CATEGORY_COLORS = ["#6C8CFF", "#45C7B2", "#F5B84B", "#A98AF4", "#FF6B7B", "#4FD1A1", "#6EB2E8", "#E06C75", "#D19A66", "#77808D"];
+const mergeCategoryDefs = (rows) => {
+  const existing = Array.isArray(rows) ? rows.map((x) => ({ ...x, id: x.id || x.k, name: x.name || x.n, color: x.color || x.c || "#77808D", parentId: x.parentId || "", active: x.active !== false })) : [];
+  const byId = new Map(existing.filter((x) => x.id).map((x) => [x.id, x]));
+  return [
+    ...DEFAULT_CATEGORY_DEFS.map((seed) => ({ ...seed, ...(byId.get(seed.id) || {}), id: seed.id, system: true })),
+    ...existing.filter((x) => !DEFAULT_CATEGORY_DEFS.some((seed) => seed.id === x.id)),
+  ];
+};
 const CARDS = [
   { k: "c_cathay", n: "國泰卡" },
   { k: "c_fubon", n: "富邦卡" },
@@ -91,7 +129,7 @@ const adjust = (cash, method, delta) =>
   isCard(method) ? cash : cash.map((c) => (c.id === method ? { ...c, amt: c.amt + delta } : c));
 
 const DEFAULT = {
-  v: 40,
+  v: 41,
   sync: { updatedAt: "", rev: 0 },
   biz: { name: "卡牌", invested: 0, recovered: 0, profit: 0, share: null, log: [] },
   sharedTx: [],
@@ -120,6 +158,7 @@ const DEFAULT = {
   collateral: [],
   loans: [],
   portfolioAssets: [],
+  categoryDefs: DEFAULT_CATEGORY_DEFS,
 };
 
 const SYMC = { BTC: "#C08A2E", ETH: "#1F3A5F", LINK: "#2E6E7E", USDT: "#A8AEB5", SOL: "#6B8E6B", BNB: "#B8952E", XRP: "#4A6C8C", ADA: "#3E6B8A", DOGE: "#B39247" };
@@ -136,6 +175,15 @@ const ASSET_TYPES = [
   { k: "OTHER", n: "其他", icon: "＋", c: "#77808D" },
 ];
 const assetType = (k) => ASSET_TYPES.find((x) => x.k === k) || ASSET_TYPES[ASSET_TYPES.length - 1];
+const POPULAR_US_SYMBOLS = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "BRK.B", "JPM", "V", "LLY", "WMT", "COST", "NFLX", "AMD", "PLTR", "COIN", "SPY", "QQQ", "VOO", "VTI"];
+const POPULAR_CRYPTO = [
+  { id: "bitcoin", symbol: "BTC", name: "Bitcoin" }, { id: "ethereum", symbol: "ETH", name: "Ethereum" },
+  { id: "tether", symbol: "USDT", name: "Tether" }, { id: "binancecoin", symbol: "BNB", name: "BNB" },
+  { id: "solana", symbol: "SOL", name: "Solana" }, { id: "usd-coin", symbol: "USDC", name: "USDC" },
+  { id: "ripple", symbol: "XRP", name: "XRP" }, { id: "dogecoin", symbol: "DOGE", name: "Dogecoin" },
+  { id: "cardano", symbol: "ADA", name: "Cardano" }, { id: "chainlink", symbol: "LINK", name: "Chainlink" },
+  { id: "avalanche-2", symbol: "AVAX", name: "Avalanche" }, { id: "sui", symbol: "SUI", name: "Sui" },
+];
 
 const nf = (n, d = 0) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
 const ym = (s) => s.slice(0, 7);
@@ -190,6 +238,7 @@ const migrateState = (st = {}) => {
     collateral: Array.isArray(st.collateral) ? st.collateral : DEFAULT.collateral,
     loans: Array.isArray(st.loans) ? st.loans : DEFAULT.loans,
     portfolioAssets: Array.isArray(st.portfolioAssets) ? st.portfolioAssets : DEFAULT.portfolioAssets,
+    categoryDefs: mergeCategoryDefs(st.categoryDefs),
     tx: Array.isArray(st.tx) ? st.tx : DEFAULT.tx,
     sharedTx: (Array.isArray(st.sharedTx) ? st.sharedTx : DEFAULT.sharedTx).map(normalizeShared),
     snaps: Array.isArray(st.snaps) ? st.snaps : DEFAULT.snaps,
@@ -226,6 +275,7 @@ const writeBook = async (next) => {
 const CLOUD_URL_KEY = "money_cloud_api_url_v1";
 const CLOUD_TOKEN_KEY = "money_cloud_api_token_v1";
 let cloudSaveTimer = null;
+let marketSearchSeq = 0;
 
 const cloudConfig = () => {
   try {
@@ -253,7 +303,7 @@ const tsOf = (s) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const cloudJsonp = (action = "load", timeoutMs = 12000) => new Promise((resolve, reject) => {
+const cloudJsonp = (action = "load", timeoutMs = 12000, params = {}) => new Promise((resolve, reject) => {
   const cfg = cloudConfig();
   if (!cfg.url || !cfg.token) return reject(new Error("雲端尚未設定"));
   let u;
@@ -278,6 +328,7 @@ const cloudJsonp = (action = "load", timeoutMs = 12000) => new Promise((resolve,
   u.searchParams.set("action", action);
   u.searchParams.set("token", cfg.token);
   u.searchParams.set("callback", cb);
+  Object.entries(params || {}).forEach(([key, value]) => u.searchParams.set(key, String(value)));
   u.searchParams.set("_", String(Date.now()));
   script.async = true;
   script.onerror = () => {
@@ -499,10 +550,11 @@ function App() {
   const [sheet, setSheet] = useState(false);
   const [editId, setEditId] = useState(null);
   const [kind, setKind] = useState("expense");
-  const [f, setF] = useState({ amount: "", cat: "food", method: "c1", date: today(), note: "" });
+  const [f, setF] = useState({ amount: "", cat: "food_breakfast", method: "c1", date: today(), note: "" });
   const [modal, setModal] = useState(null);
   const [px, setPx] = useState({ busy: false, err: null });
   const [search, setSearch] = useState({ q: "", busy: false, hits: [] });
+  const [market, setMarket] = useState({ q: "", kind: "US_STOCK", busy: false, refreshing: false, hits: [], err: "" });
   const [quickMsg, setQuickMsg] = useState(null);
   const [syncStatus, setSyncStatus] = useState(() => cloudConfig().url && cloudConfig().token ? { state: "idle", text: "準備同步", at: "" } : { state: "off", text: "尚未設定 Google 試算表同步", at: "" });
 
@@ -601,6 +653,36 @@ function App() {
     }
   };
 
+  const searchAssetMarket = async (q, marketKind = market.kind) => {
+    const query = String(q || "").trim();
+    const seq = ++marketSearchSeq;
+    setMarket((prev) => ({ ...prev, q, kind: marketKind, busy: query.length >= 2, err: "" }));
+    if (marketKind === "US_STOCK") {
+      const catalog = Array.isArray(window.__US_STOCKS__) ? window.__US_STOCKS__ : [];
+      const upper = query.toUpperCase();
+      const popular = POPULAR_US_SYMBOLS.map((symbol) => catalog.find((row) => row.s === symbol)).filter(Boolean);
+      const matches = query.length < 1 ? popular : catalog
+        .filter((row) => row.s.includes(upper) || String(row.n || "").toUpperCase().includes(upper))
+        .sort((a, b) => (a.s === upper ? -100 : a.s.startsWith(upper) ? -10 : 0) - (b.s === upper ? -100 : b.s.startsWith(upper) ? -10 : 0) || a.s.localeCompare(b.s))
+        .slice(0, 40);
+      if (seq === marketSearchSeq) setMarket({ q, kind: marketKind, busy: false, refreshing: false, hits: matches.map((row) => ({ id: `us:${row.s}`, symbol: row.s, name: row.n, exchange: row.e, assetClass: row.t, currency: "USD", provider: "YAHOO", providerId: "", providerSymbol: row.y || row.s })), err: "" });
+      return;
+    }
+    if (query.length < 2) {
+      setMarket({ q, kind: marketKind, busy: false, refreshing: false, hits: POPULAR_CRYPTO.map((row) => ({ ...row, assetClass: "CRYPTO", currency: "USD", provider: "COINGECKO", providerId: row.id, providerSymbol: row.symbol })), err: "" });
+      return;
+    }
+    try {
+      const response = await fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(query)}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json();
+      if (seq !== marketSearchSeq) return;
+      setMarket({ q, kind: marketKind, busy: false, refreshing: false, hits: (payload.coins || []).slice(0, 35).map((row) => ({ id: `crypto:${row.id}`, symbol: String(row.symbol || "").toUpperCase(), name: row.name || row.id, thumb: row.thumb, assetClass: "CRYPTO", currency: "USD", provider: "COINGECKO", providerId: row.id, providerSymbol: String(row.symbol || "").toUpperCase() })), err: "" });
+    } catch (error) {
+      if (seq === marketSearchSeq) setMarket((prev) => ({ ...prev, busy: false, hits: [], err: "加密貨幣資料暫時連不上，稍後再試" }));
+    }
+  };
+
   const save = async (next) => {
     const clean = migrateState(touchSync(next));
     setD(clean);
@@ -608,6 +690,66 @@ function App() {
     scheduleCloudPush(clean, setSyncStatus);
   };
   const patch = (p, id, k, v) => save({ ...d, [p]: d[p].map((x) => (x.id === id ? { ...x, [k]: v } : x)) });
+
+  const marketQuote = async (item) => {
+    if (String(item.provider || "").toUpperCase() === "COINGECKO" && item.providerId) {
+      const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(item.providerId)}&vs_currencies=usd`);
+      if (!response.ok) throw new Error("CoinGecko 行情暫時無法取得");
+      const payload = await response.json();
+      const value = Number(payload[item.providerId]?.usd || 0);
+      if (!(value > 0)) throw new Error("找不到這個幣種的 USD 行情");
+      return { assetId: item.id, price: value, currency: "USD", provider: "COINGECKO", updatedAt: new Date().toISOString() };
+    }
+    const payload = await cloudJsonp("market_quotes", 18000, { items: JSON.stringify([{ assetId: item.id, symbol: item.providerSymbol || item.symbol, provider: item.provider || "YAHOO", currency: item.cur || item.currency || "USD" }]) });
+    const quote = payload.quotes?.[0];
+    if (!quote || !(Number(quote.price) > 0)) throw new Error("目前抓不到這檔美股行情，可先手動填價格");
+    return quote;
+  };
+
+  const chooseMarketAsset = async (item) => {
+    const next = {
+      type: "asset", mode: "form", picked: true, id: "", name: item.name || item.symbol, symbol: item.symbol || "",
+      assetClass: item.assetClass || "US_STOCK", cur: item.currency || "USD", qty: "", price: "", cost: "", account: "", group: "核心持倉", included: true,
+      provider: item.provider || "", providerId: item.providerId || "", providerSymbol: item.providerSymbol || item.symbol || "", quoteBusy: true, quoteError: "",
+    };
+    setModal(next);
+    try {
+      const quote = await marketQuote({ ...item, id: "preview" });
+      setModal((current) => current?.type === "asset" && !current.id && current.symbol === next.symbol ? { ...current, price: String(quote.price), cur: quote.currency || current.cur, quoteBusy: false, quoteError: "" } : current);
+    } catch (error) {
+      setModal((current) => current?.type === "asset" && !current.id && current.symbol === next.symbol ? { ...current, quoteBusy: false, quoteError: error?.message || "行情暫時無法取得" } : current);
+    }
+  };
+
+  const refreshPortfolioQuotes = async () => {
+    const assets = (d.portfolioAssets || []).filter((row) => row.provider && (row.providerId || row.providerSymbol || row.symbol));
+    if (!assets.length) { alert("目前持倉沒有可自動更新的美股或加密貨幣"); return; }
+    setMarket((prev) => ({ ...prev, refreshing: true, err: "" }));
+    const quotes = [];
+    const crypto = assets.filter((row) => row.provider === "COINGECKO" && row.providerId);
+    if (crypto.length) {
+      try {
+        const ids = [...new Set(crypto.map((row) => row.providerId))];
+        const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(ids.join(","))}&vs_currencies=usd`);
+        if (response.ok) {
+          const payload = await response.json();
+          crypto.forEach((row) => { const price = Number(payload[row.providerId]?.usd || 0); if (price > 0) quotes.push({ assetId: row.id, price, currency: "USD", updatedAt: new Date().toISOString() }); });
+        }
+      } catch (error) {}
+    }
+    const stocks = assets.filter((row) => row.provider !== "COINGECKO").slice(0, 25);
+    if (stocks.length) {
+      try {
+        const payload = await cloudJsonp("market_quotes", 20000, { items: JSON.stringify(stocks.map((row) => ({ assetId: row.id, symbol: row.providerSymbol || row.symbol, provider: row.provider || "YAHOO", currency: row.cur || "USD" }))) });
+        (payload.quotes || []).forEach((quote) => quotes.push(quote));
+      } catch (error) {}
+    }
+    if (quotes.length) {
+      const byId = new Map(quotes.map((quote) => [quote.assetId, quote]));
+      await save({ ...d, portfolioAssets: (d.portfolioAssets || []).map((row) => byId.has(row.id) ? { ...row, price: Number(byId.get(row.id).price), cur: byId.get(row.id).currency || row.cur, priceUpdatedAt: byId.get(row.id).updatedAt || new Date().toISOString(), updatedAt: new Date().toISOString() } : row) });
+    }
+    setMarket((prev) => ({ ...prev, refreshing: false, err: quotes.length ? "" : "行情暫時抓不到，已保留原價格" }));
+  };
 
   const syncNow = async () => {
     const cfg = cloudConfig();
@@ -642,6 +784,32 @@ function App() {
   const payAccts = d.cash.filter((c) => !c.excluded && !c.earmark);
   const methods = [...payAccts.map((c) => ({ k: c.id, n: c.name, card: false, amt: c.amt, cur: c.cur })), ...CARDS.map((c) => ({ ...c, card: true }))];
   const mName = (k) => d.cash.find((c) => c.id === k)?.name || CARDS.find((c) => c.k === k)?.n || { cash: "現金", cathay: "國泰", esun: "玉山" }[k] || k;
+  const categoryDefs = Array.isArray(d.categoryDefs) ? d.categoryDefs : DEFAULT_CATEGORY_DEFS;
+  const categoryById = (id) => categoryDefs.find((x) => x.id === id);
+  const categoryRoot = (id) => {
+    const row = categoryById(id);
+    return row?.parentId ? categoryById(row.parentId) || row : row;
+  };
+  const categoryRoots = (type, includeInactive = false) => categoryDefs.filter((x) => x.type === type && !x.parentId && (includeInactive || x.active !== false));
+  const categoryChildren = (parentId, includeInactive = false) => categoryDefs.filter((x) => x.parentId === parentId && (includeInactive || x.active !== false));
+  const firstCategoryId = (type, rootId = "") => {
+    const root = (rootId && categoryById(rootId)) || categoryRoots(type)[0];
+    return categoryChildren(root?.id || "")[0]?.id || root?.id || "other";
+  };
+  const categoryPath = (id) => {
+    const row = categoryById(id);
+    if (!row) return id || "未分類";
+    const parent = row.parentId ? categoryById(row.parentId) : null;
+    return parent ? `${parent.name}／${row.name}` : row.name;
+  };
+  const categoryUsageCount = (id) => d.tx.filter((x) => x.cat === id).length + (d.sharedTx || []).filter((x) => x.cat === id).length;
+  const categoryDeleteReason = (row) => {
+    if (!row) return "找不到分類";
+    if (row.system) return "內建分類可改名、換顏色或停用，但不直接刪除";
+    if (categoryChildren(row.id, true).length) return "請先刪除或移動這個大分類底下的小分類";
+    if (categoryUsageCount(row.id) > 0) return "這個分類已有歷史帳目，可停用但不能刪除";
+    return "";
+  };
 
   // 轉帳端點：TWD 帳戶 + 幣安 / 派網 U 餘額。轉帳本身不列收入支出。
   const transferAccounts = [
@@ -762,14 +930,14 @@ function App() {
 
   const smtx = stx.filter((t) => ym(t.date) === month);
   const sSpent = smtx.reduce((a, t) => a + t.amount, 0);
-  const sByCat = SHARED_CATS.map((c) => ({ ...c, v: smtx.filter((t) => t.cat === c.k).reduce((a, t) => a + t.amount, 0) })).filter((c) => c.v > 0).sort((a, b) => b.v - a.v);
+  const sByCat = categoryRoots("shared", true).map((c) => ({ k: c.id, n: c.name, c: c.color, v: smtx.filter((t) => categoryRoot(t.cat)?.id === c.id).reduce((a, t) => a + t.amount, 0) })).filter((c) => c.v > 0).sort((a, b) => b.v - a.v);
 
   const months = [...new Set([month, ...d.tx.map((t) => ym(t.date)), ...(d.transfers || []).map((t) => ym(t.date)), ...(d.sharedTx || []).map((t) => ym(t.date))])].sort().reverse();
   const mtx = d.tx.filter((t) => ym(t.date) === month).sort((a, b) => b.date.localeCompare(a.date));
   const mTransfers = (d.transfers || []).filter((t) => ym(t.date) === month).sort((a, b) => b.date.localeCompare(a.date) || String(b.id).localeCompare(String(a.id)));
   const spent = mtx.filter((t) => t.kind === "expense").reduce((a, t) => a + t.amount, 0);
   const earned = mtx.filter((t) => t.kind === "income").reduce((a, t) => a + t.amount, 0);
-  const byCat = CATS.map((c) => ({ ...c, v: mtx.filter((t) => t.kind === "expense" && t.cat === c.k).reduce((a, t) => a + t.amount, 0) }))
+  const byCat = categoryRoots("expense", true).map((c) => ({ k: c.id, n: c.name, c: c.color, v: mtx.filter((t) => t.kind === "expense" && categoryRoot(t.cat)?.id === c.id).reduce((a, t) => a + t.amount, 0) }))
     .filter((c) => c.v > 0).sort((a, b) => b.v - a.v);
 
   const cardSpent = mtx.filter((t) => t.kind === "expense" && isCard(t.method)).reduce((a, t) => a + t.amount, 0);
@@ -822,7 +990,7 @@ function App() {
     if (!t || t.kind === "payment" || t.kind === "loan_payment") return;
     setEditId(t.id);
     setKind(t.kind);
-    setF({ amount: String(t.amount || ""), cat: t.cat || (t.kind === "income" ? "base" : "other"), method: t.method || "c1", date: t.date || today(), note: t.note || "" });
+    setF({ amount: String(t.amount || ""), cat: t.cat || firstCategoryId(t.kind), method: t.method || "c1", date: t.date || today(), note: t.note || "" });
     setSheet(true);
   };
 
@@ -1169,14 +1337,14 @@ function App() {
             <div style={{ ...S.lbl, marginBottom: 4 }}>流水 · {mtx.length} 筆</div>
             {mtx.length === 0 && <div style={{ padding: "26px 0", textAlign: "center", color: C.dim, fontSize: 12.5 }}>這個月還沒記帳。按下面的按鈕開始。</div>}
             {mtx.map((t) => {
-              const cat = [...CATS, ...INCOME_CATS].find((c) => c.k === t.cat);
+              const cat = categoryById(t.cat);
               const loanPay = t.kind === "loan_payment";
               const pay = t.kind === "payment" || loanPay;
               return (
                 <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 0", borderTop: `1px solid ${C.line}` }}>
                   <div style={{ width: 3, alignSelf: "stretch", borderRadius: 2, background: loanPay ? C.teal : isCard(t.method) ? C.amber : t.kind === "income" ? C.inc : C.line }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5 }}>{loanPay ? "繳 信貸" : pay ? `繳 ${mName(t.method)}` : cat?.n}{t.note ? ` · ${t.note}` : ""}</div>
+                    <div style={{ fontSize: 13.5 }}>{loanPay ? "繳 信貸" : pay ? `繳 ${mName(t.method)}` : categoryPath(cat?.id || t.cat)}{t.note ? ` · ${t.note}` : ""}</div>
                     <div style={{ fontSize: 10.5, color: C.dim, marginTop: 3 }}>{t.date.slice(5).replace("-", "/")} · {loanPay ? `${mName(t.payFrom)} → 信貸` : pay ? `${mName(t.payFrom || "c3")} → ${mName(t.method)}` : mName(t.method)}</div>
                   </div>
                   <div style={{ fontSize: 15, color: pay ? C.dim : t.kind === "income" ? C.inc : C.text }}>{t.kind === "income" ? "+" : pay ? "" : "−"}{nf(t.amount)}</div>
@@ -1228,7 +1396,7 @@ function App() {
             <div style={{ ...S.lbl, marginBottom: 4 }}>共同流水 · {smtx.length} 筆</div>
             {smtx.length === 0 && <div style={{ padding: "26px 0", textAlign: "center", color: C.dim, fontSize: 12.5, lineHeight: 1.8 }}>還沒有共同開銷。<br />你先付的錢記在這裡，結算時一次跟基金拿回來。</div>}
             {smtx.map((t) => {
-              const cat = SHARED_CATS.find((c) => c.k === t.cat);
+              const cat = categoryById(t.cat);
               const rem = sharedRemaining(t);
               const paid = sharedSettledAmount(t);
               const full = rem <= 0.001;
@@ -1237,7 +1405,7 @@ function App() {
                 <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 0", borderTop: `1px solid ${C.line}` }}>
                   <div style={{ width: 3, alignSelf: "stretch", borderRadius: 2, background: full ? C.line : C.purple }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, color: full ? C.dim : C.text }}>{cat?.n}{t.note ? ` · ${t.note}` : ""}</div>
+                    <div style={{ fontSize: 13.5, color: full ? C.dim : C.text }}>{categoryPath(cat?.id || t.cat)}{t.note ? ` · ${t.note}` : ""}</div>
                     <div style={{ fontSize: 10.5, color: C.dim, marginTop: 3 }}>{t.date.slice(5).replace("-", "/")} · {mName(t.method)} · {status}</div>
                   </div>
                   <div style={{ fontSize: 15, color: full ? C.dim : C.text }}>{nf(t.amount)}</div>
@@ -1319,8 +1487,12 @@ function App() {
           <div style={{ ...S.card, padding: "16px 17px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 13 }}>
               <div><div style={S.lbl}>投資組合 · {nf(invTWD)}</div><div style={{ ...S.sub, marginTop: 3 }}>自訂標的＋原有 Crypto，一起計入淨資產</div></div>
-              <button onClick={() => setModal({ type: "asset", id: "", name: "", symbol: "", assetClass: "TW_STOCK", cur: "TWD", qty: "", price: "", cost: "", account: "", group: "核心持倉", included: true })}
-                style={{ background: C.ink, border: "none", borderRadius: 10, color: "#fff", fontWeight: 850, fontSize: 12.5, cursor: "pointer", padding: "9px 11px" }}>＋ 新增標的</button>
+              <div style={{ display: "flex", gap: 6 }}>
+                {portfolioRows.length > 0 && <button onClick={refreshPortfolioQuotes} disabled={market.refreshing}
+                  style={{ background: C.soft, border: `1px solid ${C.line}`, borderRadius: 10, color: C.teal, fontWeight: 800, fontSize: 11.5, cursor: "pointer", padding: "9px 10px", opacity: market.refreshing ? .55 : 1 }}>{market.refreshing ? "更新中…" : "↻ 行情"}</button>}
+                <button onClick={() => { setMarket({ q: "", kind: "US_STOCK", busy: false, refreshing: false, hits: [], err: "" }); setModal({ type: "asset", mode: "discover", id: "", marketKind: "US_STOCK" }); setTimeout(() => searchAssetMarket("", "US_STOCK"), 0); }}
+                  style={{ background: C.ink, border: "none", borderRadius: 10, color: "#fff", fontWeight: 850, fontSize: 12.5, cursor: "pointer", padding: "9px 11px" }}>＋ 新增標的</button>
+              </div>
             </div>
 
             {allocationRows.length > 0 ? <>
@@ -1340,9 +1512,9 @@ function App() {
                 <Legend data={allocationLegend} />
               </div>
             </> : (
-              <button onClick={() => setModal({ type: "asset", id: "", name: "", symbol: "", assetClass: "TW_STOCK", cur: "TWD", qty: "", price: "", cost: "", account: "", group: "核心持倉", included: true })}
+              <button onClick={() => { setMarket({ q: "", kind: "US_STOCK", busy: false, refreshing: false, hits: [], err: "" }); setModal({ type: "asset", mode: "discover", id: "", marketKind: "US_STOCK" }); setTimeout(() => searchAssetMarket("", "US_STOCK"), 0); }}
                 style={{ width: "100%", background: C.soft, border: `1px dashed ${C.line}`, borderRadius: 14, color: C.dim, padding: "24px 14px", marginBottom: 14, cursor: "pointer", lineHeight: 1.8 }}>
-                還沒有自訂標的<br /><span style={{ color: C.ink, fontWeight: 850 }}>新增台股、美股、ETF、基金或任何資產</span>
+                還沒有投資標的<br /><span style={{ color: C.ink, fontWeight: 850 }}>搜尋美股、ETF 或加密貨幣</span>
               </button>
             )}
 
@@ -1354,7 +1526,7 @@ function App() {
                 {rows.map((x) => {
                   const meta = assetType(x.assetClass);
                   const pnlPct = x.costTWD > 0 ? x.pnlTWD / x.costTWD * 100 : 0;
-                  return <button key={x.id} onClick={() => setModal({ type: "asset", id: x.id, name: x.name || "", symbol: x.symbol || "", assetClass: x.assetClass || "OTHER", cur: x.cur || "TWD", qty: String(x.qty ?? ""), price: String(x.price ?? ""), cost: String(x.cost ?? ""), account: x.account || "", group: x.group || "", included: x.included !== false })}
+                  return <button key={x.id} onClick={() => setModal({ type: "asset", mode: "form", id: x.id, name: x.name || "", symbol: x.symbol || "", assetClass: x.assetClass || "OTHER", cur: x.cur || "TWD", qty: String(x.qty ?? ""), price: String(x.price ?? ""), cost: String(x.cost ?? ""), account: x.account || "", group: x.group || "", included: x.included !== false, provider: x.provider || "", providerId: x.providerId || "", providerSymbol: x.providerSymbol || "", quoteBusy: false, quoteError: "" })}
                     style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, background: C.soft, border: `1px solid ${C.line}`, borderRadius: 13, color: C.text, padding: "11px 12px", marginBottom: 7, cursor: "pointer", textAlign: "left" }}>
                     <span style={{ width: 34, height: 34, borderRadius: 11, display: "grid", placeItems: "center", background: `${meta.c}22`, color: meta.c, fontSize: 12, fontWeight: 900, flexShrink: 0 }}>{meta.icon}</span>
                     <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: 13.5, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</span><span style={{ display: "block", color: C.dim, fontSize: 10.5, marginTop: 3 }}>{x.symbol || meta.n}{x.account ? ` · ${x.account}` : ""}{x.included === false ? " · 不計淨資產" : ""}</span></span>
@@ -1363,6 +1535,8 @@ function App() {
                 })}
               </div>;
             })}
+
+            {market.err && <div style={{ color: C.amber, fontSize: 11.5, lineHeight: 1.7, margin: "5px 1px 12px" }}>{market.err}</div>}
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "9px 0 10px", borderTop: portfolioRows.length ? `1px solid ${C.line}` : "none" }}>
               <span style={{ fontSize: 10, color: C.dim, letterSpacing: "0.1em" }}>原有 CRYPTO／交易所</span>
@@ -1625,7 +1799,7 @@ function App() {
                 ⇄ 轉帳
               </button>
             )}
-            <button onClick={() => { setEditId(null); if (tab === "shared") { setKind("shared"); setF({ ...f, amount: "", note: "", date: today(), cat: "s_food", method: "c1" }); } else { if (kind === "shared") setKind("expense"); setF({ ...f, amount: "", note: "", date: today(), cat: kind === "income" ? "base" : "food", method: kind === "income" ? "c2" : "c1" }); } setSheet(true); }}
+            <button onClick={() => { setEditId(null); if (tab === "shared") { setKind("shared"); setF({ ...f, amount: "", note: "", date: today(), cat: firstCategoryId("shared"), method: "c1" }); } else { const nextKind = kind === "shared" ? "expense" : kind; setKind(nextKind); setF({ ...f, amount: "", note: "", date: today(), cat: firstCategoryId(nextKind), method: nextKind === "income" ? "c2" : "c1" }); } setSheet(true); }}
               style={{ flex: 1, background: tab === "shared" ? C.purple : C.ink, border: "none", borderRadius: 15, color: "#fff", fontWeight: 850, fontSize: 15.5, padding: "15px", cursor: "pointer", boxShadow: "0 10px 30px rgba(0,0,0,.24)" }}>
               {tab === "shared" ? "＋ 記一筆共同開銷" : "＋ 記一筆"}
             </button>
@@ -1880,11 +2054,30 @@ function App() {
                 </div>
               </>
             ) : modal.type === "asset" ? (
-              <>
-                <div style={{ fontSize: 11.5, color: C.dim, lineHeight: 1.75, marginBottom: 13 }}>任何股票、ETF、基金、債券或實體資產都能自己建立。價格先手動更新，資料會跟你的帳本一起備份與同步。</div>
+              modal.mode === "discover" ? <>
+                <div style={{ fontSize: 11.5, color: C.dim, lineHeight: 1.75, marginBottom: 13 }}>從公開資料搜尋標的。美股／ETF 清單來自 Nasdaq Trader，加密貨幣與幣價來自 CoinGecko。</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 7, marginBottom: 12 }}>
+                  {[{ k: "US_STOCK", n: "美股／ETF" }, { k: "CRYPTO", n: "加密貨幣" }].map((item) => <button key={item.k} onClick={() => { setModal({ ...modal, marketKind: item.k }); searchAssetMarket("", item.k); }} style={{ ...S.chip(modal.marketKind === item.k, item.k === "CRYPTO" ? C.amber : C.ink), borderRadius: 10, padding: "11px 5px" }}>{item.n}</button>)}
+                  <button onClick={() => setModal({ type: "asset", mode: "form", id: "", name: "", symbol: "", assetClass: "OTHER", cur: "TWD", qty: "", price: "", cost: "", account: "", group: "核心持倉", included: true, provider: "", providerId: "", providerSymbol: "", quoteBusy: false, quoteError: "" })} style={{ ...S.chip(false, C.teal), borderRadius: 10, padding: "11px 5px" }}>自己新增</button>
+                </div>
+                <input autoFocus placeholder={modal.marketKind === "CRYPTO" ? "搜尋 BTC、Solana…" : "搜尋 AAPL、Tesla、ETF…"} value={market.q} onChange={(e) => searchAssetMarket(e.target.value, modal.marketKind || "US_STOCK")} style={{ ...S.inp, marginBottom: 10 }} />
+                <div style={{ display: "flex", justifyContent: "space-between", color: C.dim, fontSize: 10.5, marginBottom: 5 }}><span>{market.q ? `搜尋結果 · ${market.hits.length}` : "熱門標的"}</span><span>{modal.marketKind === "CRYPTO" ? "CoinGecko" : `${(window.__US_STOCKS__ || []).length.toLocaleString()} 檔公開清單`}</span></div>
+                {market.busy && <div style={{ fontSize: 12, color: C.dim, padding: "14px 2px" }}>搜尋公開資料中…</div>}
+                <div style={{ maxHeight: "48vh", overflowY: "auto", marginBottom: 12 }}>
+                  {market.hits.map((item) => <button key={item.id} onClick={() => chooseMarketAsset(item)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", borderTop: `1px solid ${C.line}`, color: C.text, padding: "12px 2px", cursor: "pointer", textAlign: "left" }}>
+                    {item.thumb ? <img src={item.thumb} alt="" style={{ width: 28, height: 28, borderRadius: 14 }} /> : <span style={{ width: 36, height: 28, borderRadius: 9, display: "grid", placeItems: "center", background: `${item.assetClass === "CRYPTO" ? C.amber : C.ink}22`, color: item.assetClass === "CRYPTO" ? C.amber : C.ink, fontWeight: 900, fontSize: 10.5 }}>{item.symbol.slice(0, 5)}</span>}
+                    <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: 13.5, fontWeight: 800 }}>{item.symbol}</span><span style={{ display: "block", color: C.dim, fontSize: 10.5, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</span></span>
+                    <span style={{ color: C.dim, fontSize: 10.5 }}>{item.exchange || "Crypto"}</span>
+                  </button>)}
+                </div>
+                {market.err && <div style={{ color: C.amber, fontSize: 11.5, marginBottom: 12 }}>{market.err}</div>}
+                <button onClick={() => setModal(null)} style={{ ...S.chip(false, C.ink), width: "100%", borderRadius: 10, padding: "13px", fontSize: 14 }}>取消</button>
+              </> : <>
+                {!modal.id && <button onClick={() => { setModal({ type: "asset", mode: "discover", id: "", marketKind: modal.assetClass === "CRYPTO" ? "CRYPTO" : "US_STOCK" }); searchAssetMarket("", modal.assetClass === "CRYPTO" ? "CRYPTO" : "US_STOCK"); }} style={{ background: "none", border: "none", color: C.ink, fontSize: 11.5, cursor: "pointer", padding: "0 0 12px" }}>‹ 回去搜尋其他標的</button>}
+                <div style={{ fontSize: 11.5, color: C.dim, lineHeight: 1.75, marginBottom: 13 }}>{modal.provider ? `已連結 ${modal.provider === "COINGECKO" ? "CoinGecko" : "美股行情"}；價格仍可手動覆寫。` : "自訂標的由你維護名稱與價格，資料會跟帳本一起備份與同步。"}</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1.35fr .75fr", gap: 9, marginBottom: 10 }}>
-                  <label><div style={{ ...S.lbl, marginBottom: 6 }}>標的名稱</div><input autoFocus placeholder="例如 台積電" value={modal.name} onChange={(e) => setModal({ ...modal, name: e.target.value })} style={S.inp} /></label>
-                  <label><div style={{ ...S.lbl, marginBottom: 6 }}>代號</div><input placeholder="2330" value={modal.symbol} onChange={(e) => setModal({ ...modal, symbol: e.target.value.toUpperCase() })} autoCapitalize="characters" style={S.inp} /></label>
+                  <label><div style={{ ...S.lbl, marginBottom: 6 }}>標的名稱</div><input autoFocus placeholder="例如 Apple" value={modal.name || ""} onChange={(e) => setModal({ ...modal, name: e.target.value })} style={S.inp} /></label>
+                  <label><div style={{ ...S.lbl, marginBottom: 6 }}>代號</div><input placeholder="AAPL" value={modal.symbol || ""} onChange={(e) => setModal({ ...modal, symbol: e.target.value.toUpperCase(), providerSymbol: modal.provider ? modal.providerSymbol : e.target.value.toUpperCase() })} autoCapitalize="characters" style={S.inp} /></label>
                 </div>
                 <div style={{ ...S.lbl, marginBottom: 7 }}>資產類型</div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 13 }}>
@@ -1902,6 +2095,7 @@ function App() {
                   <label><div style={{ ...S.lbl, marginBottom: 6 }}>持有數量</div><input inputMode="decimal" placeholder="0" value={modal.qty} onChange={(e) => setModal({ ...modal, qty: e.target.value })} style={S.inp} /></label>
                   <label><div style={{ ...S.lbl, marginBottom: 6 }}>目前單價 · {modal.cur}</div><input inputMode="decimal" placeholder="0" value={modal.price} onChange={(e) => setModal({ ...modal, price: e.target.value })} style={S.inp} /></label>
                 </div>
+                {modal.provider && <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "-2px 0 11px" }}><button disabled={modal.quoteBusy} onClick={async () => { setModal({ ...modal, quoteBusy: true, quoteError: "" }); try { const quote = await marketQuote({ ...modal, currency: modal.cur }); setModal((current) => current?.type === "asset" ? { ...current, price: String(quote.price), cur: quote.currency || current.cur, quoteBusy: false, quoteError: "" } : current); } catch (error) { setModal((current) => current?.type === "asset" ? { ...current, quoteBusy: false, quoteError: error?.message || "行情暫時無法取得" } : current); } }} style={{ ...S.chip(false, C.teal), borderRadius: 9, padding: "8px 10px", opacity: modal.quoteBusy ? .55 : 1 }}>{modal.quoteBusy ? "抓行情中…" : "↻ 更新目前行情"}</button><span style={{ color: modal.quoteError ? C.amber : C.dim, fontSize: 10.5 }}>{modal.quoteError || (modal.price ? "可手動修改" : "尚未取得價格")}</span></div>}
                 <label style={{ display: "block", marginBottom: 12 }}><div style={{ ...S.lbl, marginBottom: 6 }}>平均成本 · {modal.cur}（可留空）</div><input inputMode="decimal" placeholder="0" value={modal.cost} onChange={(e) => setModal({ ...modal, cost: e.target.value })} style={S.inp} /></label>
                 <div style={{ padding: "11px 12px", background: C.bg, borderRadius: 11, marginBottom: 12, color: C.dim, fontSize: 11.5, lineHeight: 1.8 }}>
                   目前市值 <b style={{ color: C.text }}>{nf((Number(modal.qty || 0) * Number(modal.price || 0)) * (modal.cur === "TWD" ? 1 : d.fx))} TWD</b>
@@ -1916,7 +2110,7 @@ function App() {
                     const qty = Number(modal.qty || 0), price = Number(modal.price || 0), cost = Number(modal.cost || 0);
                     if (!name) { alert("請填標的名稱"); return; }
                     if (!(qty >= 0) || !(price >= 0) || !(cost >= 0)) { alert("數量、價格與成本不能是負數"); return; }
-                    const row = { id: modal.id || "pa" + Date.now(), name, symbol: String(modal.symbol || name).trim().toUpperCase(), assetClass: modal.assetClass || "OTHER", cur: modal.cur || "TWD", qty, price, cost, account: String(modal.account || "").trim(), group: String(modal.group || "").trim() || "未分組", included: modal.included !== false, updatedAt: new Date().toISOString() };
+                    const row = { id: modal.id || "pa" + Date.now(), name, symbol: String(modal.symbol || name).trim().toUpperCase(), assetClass: modal.assetClass || "OTHER", cur: modal.cur || "TWD", qty, price, cost, account: String(modal.account || "").trim(), group: String(modal.group || "").trim() || "未分組", included: modal.included !== false, provider: modal.provider || "", providerId: modal.providerId || "", providerSymbol: modal.providerSymbol || "", updatedAt: new Date().toISOString() };
                     const list = modal.id ? (d.portfolioAssets || []).map((x) => x.id === modal.id ? row : x) : [...(d.portfolioAssets || []), row];
                     save({ ...d, portfolioAssets: list });
                     setModal(null);
@@ -2194,15 +2388,19 @@ function App() {
               </div>
             ) : (
               <div style={{ display: "flex", gap: 7, marginBottom: 16 }}>
-                <button onClick={() => { setKind("expense"); setF({ ...f, cat: "food", method: "c1" }); }} style={{ ...S.chip(kind === "expense", C.out), flex: 1, borderRadius: 8, padding: "10px" }}>支出</button>
-                <button onClick={() => { setKind("income"); setF({ ...f, cat: "base", method: "c2" }); }} style={{ ...S.chip(kind === "income", C.inc), flex: 1, borderRadius: 8, padding: "10px" }}>收入</button>
+                <button onClick={() => { setKind("expense"); setF({ ...f, cat: firstCategoryId("expense"), method: "c1" }); }} style={{ ...S.chip(kind === "expense", C.out), flex: 1, borderRadius: 8, padding: "10px" }}>支出</button>
+                <button onClick={() => { setKind("income"); setF({ ...f, cat: firstCategoryId("income"), method: "c2" }); }} style={{ ...S.chip(kind === "income", C.inc), flex: 1, borderRadius: 8, padding: "10px" }}>收入</button>
               </div>
             )}
             <input autoFocus inputMode="decimal" placeholder="0" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })}
               style={{ ...S.inp, fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Display','PingFang TC','Noto Sans TC',sans-serif", fontWeight: 800, fontSize: 34, textAlign: "center", padding: "14px", marginBottom: 16 }} />
-            <div style={{ ...S.lbl, marginBottom: 8 }}>分類</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
-              {(kind === "income" ? INCOME_CATS : kind === "shared" ? SHARED_CATS : CATS).map((c) => <button key={c.k} onClick={() => setF({ ...f, cat: c.k })} style={S.chip(f.cat === c.k, kind === "shared" ? C.purple : C.ink)}>{c.n}</button>)}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}><span style={S.lbl}>大分類</span><span style={{ color: C.dim, fontSize: 10.5 }}>{categoryPath(f.cat)}</span></div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 11 }}>
+              {categoryRoots(kind).map((root) => <button key={root.id} onClick={() => setF({ ...f, cat: firstCategoryId(kind, root.id) })} style={S.chip(categoryRoot(f.cat)?.id === root.id, root.color || (kind === "shared" ? C.purple : C.ink))}>{root.name}</button>)}
+            </div>
+            <div style={{ ...S.lbl, marginBottom: 8 }}>小分類</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "10px", background: C.bg, borderRadius: 12, marginBottom: 16 }}>
+              {categoryChildren(categoryRoot(f.cat)?.id || categoryRoots(kind)[0]?.id).map((child) => <button key={child.id} onClick={() => setF({ ...f, cat: child.id })} style={S.chip(f.cat === child.id, child.color || (kind === "shared" ? C.purple : C.ink))}>{child.name}</button>)}
             </div>
             <div style={{ ...S.lbl, marginBottom: 8 }}>{kind === "income" ? "進到哪" : "怎麼付"}</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
