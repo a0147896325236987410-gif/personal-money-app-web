@@ -1,0 +1,2263 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>記帳</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="記帳">
+<meta name="theme-color" content="#090B0F">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%23090B0F'/%3E%3Ctext x='90' y='118' font-size='84' font-family='Georgia,serif' font-weight='bold' fill='%235B7CFA' text-anchor='middle'%3E%24%3C/text%3E%3C/svg%3E">
+<script>
+window.__MONEY_APP_BUILD_TEMPLATE__ = window.location.pathname.endsWith('/shell.html');
+if (window.__MONEY_APP_BUILD_TEMPLATE__) window.location.replace('index.html');
+</script>
+<style>
+  html,body{margin:0;padding:0;background:#090B0F;color:#F5F7FA;-webkit-text-size-adjust:100%;}
+  #root{min-height:100vh;}
+  .boot{padding:60px 20px;text-align:center;color:#929AA6;font-family:-apple-system,BlinkMacSystemFont,"PingFang TC",sans-serif;font-weight:650;font-size:14px;}
+  textarea{font-family:ui-monospace,monospace;resize:none;}
+  #err{display:none;padding:20px 16px;font-family:ui-monospace,monospace;font-size:12px;line-height:1.7;color:#FF9A9A;background:#261516;}
+  #err h3{margin:0 0 10px;font-size:14px;}
+  #err pre{white-space:pre-wrap;word-break:break-all;background:#12161C;color:#F5F7FA;padding:12px;border-radius:8px;font-size:11px;margin:8px 0 0;}
+  #err button{margin-top:14px;padding:12px 18px;border:none;border-radius:8px;background:#5B7CFA;color:#fff;font-size:13px;font-family:inherit;}
+</style>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7/babel.min.js" crossorigin></script>
+</head>
+<body>
+<div id="root"><div class="boot">載入中…</div></div>
+<div id="err"></div>
+
+<script>
+// 把錯誤直接印在畫面上，不用接電腦看 console
+function showErr(title, detail) {
+  var e = document.getElementById("err");
+  e.style.display = "block";
+  e.innerHTML = "<h3>" + title + "</h3><pre>" + String(detail).replace(/</g, "&lt;") + "</pre>" +
+    "<button onclick=\"location.reload()\">重新載入</button>";
+  var r = document.getElementById("root");
+  if (r) r.innerHTML = "";
+}
+window.onerror = function (msg, src, line, col, err) {
+  showErr("程式出錯了", msg + "\n\n位置 " + (line || "?") + ":" + (col || "?") + (err && err.stack ? "\n\n" + err.stack.slice(0, 600) : ""));
+  return true;
+};
+window.addEventListener("unhandledrejection", function (ev) {
+  showErr("非同步錯誤", ev.reason && ev.reason.message ? ev.reason.message : ev.reason);
+});
+// 8 秒還沒渲染出東西就提示
+setTimeout(function () {
+  var r = document.getElementById("root");
+  if (r && r.querySelector(".boot")) {
+    showErr("載入逾時", "React 或 Babel 沒載入成功。\n\n多半是網路問題：第一次開啟需要連上網路下載函式庫。\n連上網路後按重新載入。");
+  }
+}, 8000);
+</script>
+
+<script type="text/babel" data-presets="react">
+if (!window.__MONEY_APP_BUILD_TEMPLATE__) {
+const { useState, useEffect } = React;
+
+const C = {
+  bg: "#090B0F", card: "#12161C", soft: "#181D24", line: "#252B34", text: "#F5F7FA", dim: "#929AA6",
+  out: "#FF6B6B", inc: "#4FD1A1", amber: "#F5B84B", ink: "#5B7CFA", teal: "#45C7B2", purple: "#A98AF4",
+};
+
+const CATS = [
+  { k: "food", n: "吃飯", c: "#6C8CFF" }, { k: "car", n: "交通加油", c: "#45C7B2" }, { k: "life", n: "生活日用", c: "#F5B84B" },
+  { k: "fun", n: "娛樂", c: "#A98AF4" }, { k: "shop", n: "購物", c: "#FF6B7B" }, { k: "social", n: "人情", c: "#4FD1A1" }, { k: "pet", n: "寵物", c: "#6EB2E8" }, { k: "other", n: "其他", c: "#77808D" },
+];
+const SHARED_CATS = [
+  { k: "s_food", n: "吃飯", c: "#6C8CFF" }, { k: "s_date", n: "約會", c: "#A98AF4" }, { k: "s_trip", n: "旅遊", c: "#45C7B2" },
+  { k: "s_gift", n: "禮物", c: "#FF6B7B" }, { k: "s_life", n: "生活", c: "#F5B84B" }, { k: "s_other", n: "其他", c: "#77808D" },
+];
+const INCOME_CATS = [{ k: "base", n: "底薪" }, { k: "bonus", n: "成交獎金" }, { k: "other_in", n: "其他" }];
+const CARDS = [
+  { k: "c_cathay", n: "國泰卡" },
+  { k: "c_fubon", n: "富邦卡" },
+];
+const LEGACY = { cash: "c1", cathay: "c2", esun: "c4" };
+const SYSTEM_CASH_IDS = new Set(["c1", "c2", "c3", "c4", "c5", "c7"]);
+const isCard = (k) => k === "c_cathay" || k === "c_fubon";
+const paymentCardAmount = (t) => t.cardAmount == null ? Number(t.amount || 0) : Number(t.cardAmount || 0);
+const paymentInstallmentAmount = (t) => Number(t.installmentAmount || 0);
+// 支出/收入落在哪個帳戶：刷卡不動帳戶，其餘直接加減該帳戶餘額
+const adjust = (cash, method, delta) =>
+  isCard(method) ? cash : cash.map((c) => (c.id === method ? { ...c, amt: c.amt + delta } : c));
+
+const DEFAULT = {
+  v: 40,
+  sync: { updatedAt: "", rev: 0 },
+  biz: { name: "卡牌", invested: 0, recovered: 0, profit: 0, share: null, log: [] },
+  sharedTx: [],
+  snaps: [],
+  tx: [],
+  openCard: { c_cathay: 0, c_fubon: 0 },
+  billing: { cardDueDay: { c_cathay: 22, c_fubon: 4 } },
+  fixed: { loan: 0, installment: 0 },
+  fx: 32,
+  px: { BTC: 0, ETH: 0, LINK: 0 },
+  cash: [
+    { id: "c1", name: "現金", amt: 0, cur: "TWD" },
+    { id: "c2", name: "國泰主帳戶", amt: 0, cur: "TWD" },
+    { id: "c3", name: "國泰卡費帳戶", amt: 0, cur: "TWD", earmark: true },
+    { id: "c4", name: "玉山", amt: 0, cur: "TWD" },
+    { id: "c7", name: "共同基金", amt: 0, cur: "TWD", excluded: true, note: "共同資金 · 不計入個人淨資產" },
+    { id: "c5", name: "國泰外幣活存", amt: 0, cur: "USD" },
+  ],
+  exchanges: [
+    { id: "ex_binance", name: "幣安", u: 0 },
+    { id: "ex_pionex", name: "派網", u: 0 },
+  ],
+  transfers: [],
+  spot: [],
+  bots: [],
+  collateral: [],
+  loans: [],
+  portfolioAssets: [],
+};
+
+const SYMC = { BTC: "#C08A2E", ETH: "#1F3A5F", LINK: "#2E6E7E", USDT: "#A8AEB5", SOL: "#6B8E6B", BNB: "#B8952E", XRP: "#4A6C8C", ADA: "#3E6B8A", DOGE: "#B39247" };
+const PALETTE = [C.purple, "#5A7D8C", "#8C6B5A", "#5A8C6B", "#8C5A6B", "#6B5A8C"];
+const symColor = (sym, i = 0) => SYMC[sym] || PALETTE[i % PALETTE.length];
+const ASSET_TYPES = [
+  { k: "TW_STOCK", n: "台股", icon: "台", c: "#E06C75" },
+  { k: "US_STOCK", n: "美股", icon: "美", c: "#61AFEF" },
+  { k: "ETF", n: "ETF", icon: "E", c: "#56B6C2" },
+  { k: "FUND", n: "基金", icon: "基", c: "#C678DD" },
+  { k: "BOND", n: "債券", icon: "債", c: "#E5C07B" },
+  { k: "CRYPTO", n: "加密貨幣", icon: "幣", c: "#D19A66" },
+  { k: "METAL", n: "貴金屬", icon: "金", c: "#F5B84B" },
+  { k: "OTHER", n: "其他", icon: "＋", c: "#77808D" },
+];
+const assetType = (k) => ASSET_TYPES.find((x) => x.k === k) || ASSET_TYPES[ASSET_TYPES.length - 1];
+
+const nf = (n, d = 0) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const ym = (s) => s.slice(0, 7);
+const today = () => {
+  const x = new Date();
+  const y = x.getFullYear();
+  const m = String(x.getMonth() + 1).padStart(2, "0");
+  const d = String(x.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+const addMonthsYMD = (s, n, dueDay) => {
+  if (!s) return null;
+  const [y, m, d] = s.split("-").map(Number);
+  const x = new Date(y, m - 1 + Number(n || 0), 1);
+  const day = Number(dueDay || d || 1);
+  const last = new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate();
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(Math.min(day, last)).padStart(2, "0")}`;
+};
+const monthDiff = (from, to) => {
+  if (!from || !to) return -9999;
+  const [fy, fm] = from.split("-").map(Number);
+  const [ty, tm] = to.split("-").map(Number);
+  return (ty - fy) * 12 + (tm - fm);
+};
+const md = (s) => s ? s.slice(5).replace("-", "/") : "—";
+
+const sharedSettledAmount = (t) => t.settled ? Number(t.amount || 0) : Math.min(Number(t.amount || 0), Math.max(0, Number(t.settledAmount || 0)));
+const sharedRemaining = (t) => Math.max(0, Number(t.amount || 0) - sharedSettledAmount(t));
+const normalizeShared = (t) => {
+  const paid = sharedSettledAmount(t);
+  const full = paid >= Number(t.amount || 0) - 0.001;
+  return { ...t, settledAmount: paid, settled: full };
+};
+
+const migrateState = (st = {}) => {
+  const priorV = Number(st.v || 0);
+  let next = {
+    ...DEFAULT,
+    ...st,
+    v: DEFAULT.v,
+    sync: { ...DEFAULT.sync, ...(st.sync || {}) },
+    openCard: { ...DEFAULT.openCard, ...(st.openCard || {}) },
+    billing: { ...DEFAULT.billing, ...(st.billing || {}), cardDueDay: { ...DEFAULT.billing.cardDueDay, ...(st.billing?.cardDueDay || {}) } },
+    fixed: { ...DEFAULT.fixed, ...(st.fixed || {}) },
+    px: { ...DEFAULT.px, ...(st.px || {}) },
+    biz: { ...DEFAULT.biz, ...(st.biz || {}), log: Array.isArray(st.biz?.log) ? st.biz.log : DEFAULT.biz.log },
+    cash: Array.isArray(st.cash) ? st.cash : DEFAULT.cash,
+    exchanges: Array.isArray(st.exchanges) ? st.exchanges : DEFAULT.exchanges,
+    transfers: Array.isArray(st.transfers) ? st.transfers : DEFAULT.transfers,
+    spot: Array.isArray(st.spot) ? st.spot : DEFAULT.spot,
+    bots: Array.isArray(st.bots) ? st.bots : DEFAULT.bots,
+    collateral: Array.isArray(st.collateral) ? st.collateral : DEFAULT.collateral,
+    loans: Array.isArray(st.loans) ? st.loans : DEFAULT.loans,
+    portfolioAssets: Array.isArray(st.portfolioAssets) ? st.portfolioAssets : DEFAULT.portfolioAssets,
+    tx: Array.isArray(st.tx) ? st.tx : DEFAULT.tx,
+    sharedTx: (Array.isArray(st.sharedTx) ? st.sharedTx : DEFAULT.sharedTx).map(normalizeShared),
+    snaps: Array.isArray(st.snaps) ? st.snaps : DEFAULT.snaps,
+  };
+
+  // Historical user-specific corrections were intentionally removed before GitHub import.
+  // Existing v39 cloud/local states are preserved by the additive merge above.
+  // Structural v39 fields are supplied by DEFAULT without injecting user-specific balances.
+  return next;
+};
+
+const readBook = async () => {
+  try {
+    if (window.storage?.get) {
+      const r = await window.storage.get("book");
+      if (r?.value) return r.value;
+    }
+  } catch (e) {}
+  try { return localStorage.getItem("book"); } catch (e) { return null; }
+};
+
+const writeBook = async (next) => {
+  const text = JSON.stringify(next);
+  try {
+    if (window.storage?.set) { await window.storage.set("book", text); return; }
+  } catch (e) {}
+  try { localStorage.setItem("book", text); } catch (e) {}
+};
+
+
+// ── v39 Google 試算表雲端同步 ──
+// 讀取使用 JSONP，避開 Apps Script ContentService 的跨網域限制；寫入用 simple POST + no-cors。
+// API URL / Token 只存在這個網站的 localStorage，不會寫進公開原始碼。
+const CLOUD_URL_KEY = "money_cloud_api_url_v1";
+const CLOUD_TOKEN_KEY = "money_cloud_api_token_v1";
+let cloudSaveTimer = null;
+
+const cloudConfig = () => {
+  try {
+    return {
+      url: (localStorage.getItem(CLOUD_URL_KEY) || "").trim(),
+      token: (localStorage.getItem(CLOUD_TOKEN_KEY) || "").trim(),
+    };
+  } catch (e) { return { url: "", token: "" }; }
+};
+const saveCloudConfig = (url, token) => {
+  try {
+    localStorage.setItem(CLOUD_URL_KEY, String(url || "").trim());
+    localStorage.setItem(CLOUD_TOKEN_KEY, String(token || "").trim());
+  } catch (e) {}
+};
+const clearCloudConfig = () => {
+  try { localStorage.removeItem(CLOUD_URL_KEY); localStorage.removeItem(CLOUD_TOKEN_KEY); } catch (e) {}
+};
+const touchSync = (state) => ({
+  ...state,
+  sync: { ...(state?.sync || {}), updatedAt: new Date().toISOString() },
+});
+const tsOf = (s) => {
+  const n = Date.parse(s || "");
+  return Number.isFinite(n) ? n : 0;
+};
+
+const cloudJsonp = (action = "load", timeoutMs = 12000) => new Promise((resolve, reject) => {
+  const cfg = cloudConfig();
+  if (!cfg.url || !cfg.token) return reject(new Error("雲端尚未設定"));
+  let u;
+  try { u = new URL(cfg.url); } catch (e) { return reject(new Error("API 網址格式不正確")); }
+  const cb = "__moneyCloudCb" + Date.now() + Math.floor(Math.random() * 100000);
+  let done = false;
+  const script = document.createElement("script");
+  const cleanup = () => {
+    try { delete window[cb]; } catch (e) { window[cb] = undefined; }
+    try { script.remove(); } catch (e) {}
+  };
+  const timer = setTimeout(() => {
+    if (done) return;
+    done = true; cleanup(); reject(new Error("雲端連線逾時"));
+  }, timeoutMs);
+  window[cb] = (payload) => {
+    if (done) return;
+    done = true; clearTimeout(timer); cleanup();
+    if (!payload?.ok) reject(new Error(payload?.error || "雲端回傳錯誤"));
+    else resolve(payload);
+  };
+  u.searchParams.set("action", action);
+  u.searchParams.set("token", cfg.token);
+  u.searchParams.set("callback", cb);
+  u.searchParams.set("_", String(Date.now()));
+  script.async = true;
+  script.onerror = () => {
+    if (done) return;
+    done = true; clearTimeout(timer); cleanup(); reject(new Error("雲端讀取失敗"));
+  };
+  script.src = u.toString();
+  document.head.appendChild(script);
+});
+
+const cloudPost = async (state) => {
+  const cfg = cloudConfig();
+  if (!cfg.url || !cfg.token) throw new Error("雲端尚未設定");
+  const body = new URLSearchParams();
+  body.set("action", "save");
+  body.set("token", cfg.token);
+  body.set("clientRev", String(Number(state?.sync?.rev || 0)));
+  body.set("clientUpdatedAt", state?.sync?.updatedAt || new Date().toISOString());
+  body.set("state", JSON.stringify(state));
+  await fetch(cfg.url, { method: "POST", mode: "no-cors", body });
+};
+
+const scheduleCloudPush = (state, setStatus, delay = 850) => {
+  const cfg = cloudConfig();
+  if (!cfg.url || !cfg.token) {
+    setStatus?.({ state: "off", text: "尚未設定 Google 試算表同步", at: "" });
+    return;
+  }
+  if (cloudSaveTimer) clearTimeout(cloudSaveTimer);
+  setStatus?.({ state: "pending", text: "等待同步…", at: "" });
+  cloudSaveTimer = setTimeout(async () => {
+    try {
+      setStatus?.({ state: "syncing", text: "同步中…", at: "" });
+      await cloudPost(state);
+      const check = await cloudJsonp("load", 15000);
+      const localAt = state?.sync?.updatedAt || "";
+      const remoteAt = check?.updatedAt || check?.state?.sync?.updatedAt || "";
+      if (check?.state && remoteAt !== localAt) {
+        throw new Error("雲端版本與本機不同，已停止覆蓋；請先從雲端下載並確認差異");
+      }
+      setStatus?.({ state: "synced", text: "已同步", at: remoteAt || localAt });
+    } catch (e) {
+      setStatus?.({ state: "error", text: e?.message || "同步失敗", at: "" });
+    }
+  }, Math.max(0, delay));
+};
+
+const CAT_ALIASES = {
+  "吃飯": "food", "餐飲": "food", "飲食": "food", "food": "food",
+  "交通": "car", "加油": "car", "交通加油": "car", "car": "car",
+  "生活": "life", "日用": "life", "生活日用": "life", "life": "life",
+  "娛樂": "fun", "fun": "fun", "購物": "shop", "shop": "shop",
+  "人情": "social", "social": "social", "寵物": "pet", "pet": "pet", "其他": "other", "other": "other",
+  "底薪": "base", "base": "base", "獎金": "bonus", "成交獎金": "bonus", "bonus": "bonus", "其他收入": "other_in", "other_in": "other_in",
+  "共同吃飯": "s_food", "s_food": "s_food", "約會": "s_date", "s_date": "s_date", "旅遊": "s_trip", "s_trip": "s_trip",
+  "禮物": "s_gift", "s_gift": "s_gift", "共同生活": "s_life", "s_life": "s_life", "共同其他": "s_other", "s_other": "s_other",
+};
+
+const quickAddFromUrl = (base) => {
+  try {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("quick") !== "1") return { data: base, added: false };
+
+    const text = (q.get("text") || "").trim();
+    const textAmount = text.match(/(?:^|\s|\$|＄)(\d[\d,]*(?:\.\d+)?)(?:\s|元|塊|$)/)?.[1]
+      || text.match(/(\d[\d,]*(?:\.\d+)?)/)?.[1];
+    const amount = Number(String(q.get("amount") || textAmount || "").replace(/,/g, ""));
+    if (!(amount > 0)) return { data: base, added: false, message: "快速記帳失敗：我沒抓到金額" };
+
+    const rawKind = q.get("kind") || (text.includes("共同") ? "shared" : text.includes("收入") || text.includes("薪水") || text.includes("獎金") ? "income" : "expense");
+    const k0 = rawKind.toLowerCase();
+    const kind = ({ expense: "expense", income: "income", shared: "shared", "支出": "expense", "收入": "income", "共同": "shared" })[k0] || "expense";
+
+    const methodAliases = { "現金": "c1", "國泰卡": "c_cathay", "富邦卡": "c_fubon", "國泰": "c_cathay", "富邦": "c_fubon", "國泰主帳戶": "c2", "主帳戶": "c2", "玉山": "c4" };
+    const detectedMethod = Object.keys(methodAliases).sort((a, b) => b.length - a.length).find((x) => text.includes(x));
+    const methodRaw = q.get("method") || detectedMethod || (kind === "income" ? "c2" : "c1");
+    const byName = base.cash.find((c) => c.name === methodRaw)?.id;
+    const method = byName || methodAliases[methodRaw] || methodRaw;
+    const validMethod = isCard(method) || base.cash.some((c) => c.id === method);
+    const finalMethod = validMethod ? method : (kind === "income" ? "c2" : "c1");
+
+    let autoCat = "";
+    if (kind === "income") autoCat = /底薪|薪水/.test(text) ? "base" : /獎金|佣金|成交/.test(text) ? "bonus" : "other_in";
+    else if (kind === "shared") autoCat = /旅遊|飯店|機票/.test(text) ? "s_trip" : /禮物/.test(text) ? "s_gift" : /約會|電影/.test(text) ? "s_date" : /生活|日用|家用/.test(text) ? "s_life" : /吃|餐|飯|咖啡|飲料|宵夜|早餐|午餐|晚餐/.test(text) ? "s_food" : "s_other";
+    else autoCat = /加油|停車|計程車|捷運|高鐵|火車|交通/.test(text) ? "car"
+      : /貓|狗|寵物|飼料|罐頭|獸醫/.test(text) ? "pet"
+      : /購物|衣服|鞋|蝦皮|網購/.test(text) ? "shop"
+      : /遊戲|電影|娛樂|唱歌|KTV/.test(text) ? "fun"
+      : /紅包|送禮|人情/.test(text) ? "social"
+      : /日用|衛生紙|洗髮|生活/.test(text) ? "life"
+      : /吃|餐|飯|咖啡|飲料|宵夜|早餐|午餐|晚餐/.test(text) ? "food" : "other";
+
+    const catRaw = q.get("cat") || "";
+    const cat = CAT_ALIASES[catRaw] || catRaw || autoCat;
+    const dateRaw = q.get("date") || "";
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : today();
+
+    let note = (q.get("note") || "").trim();
+    if (!note && text) {
+      note = text
+        .replace(String(textAmount || ""), " ")
+        .replace(/元|塊/g, " ")
+        .replace(/共同|支出|收入/g, " ");
+      Object.keys(methodAliases).sort((a, b) => b.length - a.length).forEach((x) => { note = note.replaceAll(x, " "); });
+      note = note.replace(/\s+/g, " ").trim();
+    }
+
+    const id = (kind === "shared" ? "sq" : "tq") + Date.now();
+    const cash = adjust(base.cash, finalMethod, kind === "income" ? amount : -amount);
+    const data = kind === "shared"
+      ? { ...base, cash, sharedTx: [{ id, amount, cat, method: finalMethod, date, note, settled: false, settledAmount: 0 }, ...(base.sharedTx || [])] }
+      : { ...base, cash, tx: [{ id, kind, amount, cat, method: finalMethod, date, note }, ...(base.tx || [])] };
+    const kindName = kind === "income" ? "收入" : kind === "shared" ? "共同" : "支出";
+    return { data, added: true, kind, date, message: `已記帳 · ${kindName} ${nf(amount)}${note ? ` · ${note}` : ""}` };
+  } catch (e) {
+    return { data: base, added: false, message: "快速記帳失敗" };
+  }
+};
+
+function Num({ value, onChange, dec = 0, suffix = "", color, size = 15 }) {
+  const [e, setE] = useState(false);
+  const [t, setT] = useState("");
+  const commit = () => { const v = parseFloat(t.replace(/,/g, "")); if (!isNaN(v)) onChange(v); setE(false); };
+  if (e) return (
+    <input autoFocus value={t} onChange={(ev) => setT(ev.target.value)} onBlur={commit}
+      onKeyDown={(ev) => ev.key === "Enter" && commit()} inputMode="decimal"
+      style={{ width: 112, background: C.bg, border: `1px solid ${C.ink}`, borderRadius: 5, color: C.text,
+        fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontSize: size, padding: "3px 7px", textAlign: "right", outline: "none" }} />
+  );
+  return (
+    <button onClick={() => { setT(String(value)); setE(true); }}
+      style={{ background: "none", border: "none", borderBottom: `1px dotted ${C.line}`, color: color || C.text,
+        fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontSize: size, padding: "1px 0", cursor: "pointer" }}>
+      {nf(value, dec)}{suffix}
+    </button>
+  );
+}
+
+function Donut({ data, center, sub, size = 128, thickness = 23 }) {
+  const total = data.reduce((a, x) => a + x.v, 0) || 1;
+  const r = (size - thickness) / 2, c = size / 2, circ = 2 * Math.PI * r;
+  let acc = 0;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
+      <g transform={`rotate(-90 ${c} ${c})`}>
+        <circle cx={c} cy={c} r={r} fill="none" stroke={C.bg} strokeWidth={thickness} />
+        {data.map((x) => {
+          const frac = x.v / total;
+          const seg = (
+            <circle key={x.k} cx={c} cy={c} r={r} fill="none" stroke={x.color} strokeWidth={thickness}
+              strokeDasharray={`${Math.max(0, circ * frac - 2)} ${circ}`} strokeDashoffset={-circ * acc} />
+          );
+          acc += frac;
+          return seg;
+        })}
+      </g>
+      <text x={c} y={c - 2} textAnchor="middle" style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Display','PingFang TC','Noto Sans TC',sans-serif", fontWeight: 800, fontSize: 16, fill: C.text }}>{center}</text>
+      <text x={c} y={c + 13} textAnchor="middle" style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontSize: 9, fill: C.dim }}>{sub}</text>
+    </svg>
+  );
+}
+
+function Trend({ snaps }) {
+  const W = 340, H = 170, P = { l: 42, r: 10, t: 12, b: 24 };
+  if (!snaps || snaps.length < 2)
+    return (
+      <div style={{ padding: "28px 4px", textAlign: "center", color: C.dim, fontSize: 12.5, lineHeight: 1.8 }}>
+        今天是第一筆紀錄。<br />每天開一次 app 就會自動記，兩天後開始出現曲線。
+      </div>
+    );
+  const vals = snaps.flatMap((s) => [s.net, s.debt]);
+  const lo = Math.min(...vals), hi = Math.max(...vals), rg = hi - lo || 1;
+  const X = (i) => P.l + (i / (snaps.length - 1)) * (W - P.l - P.r);
+  const Y = (v) => P.t + (1 - (v - lo) / rg) * (H - P.t - P.b);
+  const path = (k) => snaps.map((s, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(s[k]).toFixed(1)}`).join(" ");
+  const ticks = [lo, lo + rg / 2, hi];
+  const idx = snaps.length <= 4 ? snaps.map((_, i) => i) : [0, Math.floor(snaps.length / 3), Math.floor((snaps.length * 2) / 3), snaps.length - 1];
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: "block" }}>
+      {ticks.map((t, i) => (
+        <g key={i}>
+          <line x1={P.l} x2={W - P.r} y1={Y(t)} y2={Y(t)} stroke={C.line} strokeWidth="1" />
+          <text x={P.l - 6} y={Y(t) + 3.5} textAnchor="end" style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontSize: 8.5, fill: C.dim }}>
+            {Math.round(t / 1000)}k
+          </text>
+        </g>
+      ))}
+      <path d={path("debt")} fill="none" stroke={C.amber} strokeWidth="2" strokeDasharray="4 3" strokeLinejoin="round" />
+      <path d={path("net")} fill="none" stroke={C.ink} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+      {idx.map((i) => (
+        <text key={i} x={X(i)} y={H - 6} textAnchor="middle" style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontSize: 8.5, fill: C.dim }}>
+          {snaps[i].date.slice(5).replace("-", "/")}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+function Legend({ data }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      {data.map((x) => (
+        <div key={x.k} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", fontSize: 12.5 }}>
+          <div style={{ width: 8, height: 8, borderRadius: 2, background: x.color, flexShrink: 0 }} />
+          <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.n}</span>
+          <span style={{ color: C.dim, fontSize: 11 }}>{nf(x.v)}</span>
+          <span style={{ width: 44, textAlign: "right" }}>{nf(x.pct, 1)}%</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function App() {
+  const [d, setD] = useState(DEFAULT);
+  const [loaded, setLoaded] = useState(false);
+  const [tab, setTab] = useState("ledger");
+  const [month, setMonth] = useState(ym(today()));
+  const [sheet, setSheet] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [kind, setKind] = useState("expense");
+  const [f, setF] = useState({ amount: "", cat: "food", method: "c1", date: today(), note: "" });
+  const [modal, setModal] = useState(null);
+  const [px, setPx] = useState({ busy: false, err: null });
+  const [search, setSearch] = useState({ q: "", busy: false, hits: [] });
+  const [quickMsg, setQuickMsg] = useState(null);
+  const [syncStatus, setSyncStatus] = useState(() => cloudConfig().url && cloudConfig().token ? { state: "idle", text: "準備同步", at: "" } : { state: "off", text: "尚未設定 Google 試算表同步", at: "" });
+
+  useEffect(() => {
+    (async () => {
+      let next = migrateState(DEFAULT);
+      try {
+        const raw = await readBook();
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          next = migrateState(parsed);
+          if (Number(parsed?.v || 0) !== DEFAULT.v) await writeBook(next);
+        }
+      } catch (e) {}
+
+      // 若已設定雲端：開 App 時先比較本機與雲端更新時間，較新的那份勝出。
+      const cfg = cloudConfig();
+      if (cfg.url && cfg.token) {
+        setSyncStatus({ state: "syncing", text: "讀取雲端…", at: "" });
+        try {
+          const remote = await cloudJsonp("load");
+          if (remote?.state) {
+            const cloudState = migrateState(remote.state);
+            const remoteAt = remote.updatedAt || cloudState.sync?.updatedAt || "";
+            const localAt = next.sync?.updatedAt || "";
+            if (!localAt || tsOf(remoteAt) >= tsOf(localAt)) {
+              next = { ...cloudState, sync: { ...(cloudState.sync || {}), rev: Number(remote.rev || cloudState.sync?.rev || 0), updatedAt: remoteAt } };
+              await writeBook(next);
+            } else {
+              scheduleCloudPush(next, setSyncStatus, 0);
+            }
+            setSyncStatus({ state: "synced", text: "已連上 Google 試算表", at: remoteAt || localAt });
+          } else {
+            // 第一次串接時，雲端還沒有 state，使用手機現有資料當第一份雲端資料。
+            next = touchSync(next);
+            await writeBook(next);
+            scheduleCloudPush(next, setSyncStatus, 0);
+          }
+        } catch (e) {
+          setSyncStatus({ state: "error", text: e?.message || "雲端讀取失敗，先用手機資料", at: "" });
+        }
+      }
+
+      const quick = quickAddFromUrl(next);
+      next = quick.data;
+      if (quick.added) next = migrateState(touchSync(next));
+      setD(next);
+      if (quick.added) {
+        await writeBook(next);
+        scheduleCloudPush(next, setSyncStatus);
+        setTab(quick.kind === "shared" ? "shared" : "ledger");
+        setMonth(ym(quick.date));
+      }
+      if (quick.message) {
+        setQuickMsg(quick.message);
+        setTimeout(() => setQuickMsg(null), 3600);
+      }
+      if (window.location.search) {
+        try { window.history.replaceState({}, "", window.location.pathname + window.location.hash); } catch (e) {}
+      }
+      setLoaded(true);
+    })();
+  }, []);
+
+  useEffect(() => { if (loaded) fetchPx(); }, [loaded]);
+
+  // 依目前持倉動態組出要抓的幣種
+  const fetchPx = async (base) => {
+    const data = base || d;
+    const ids = [...new Set([...data.spot, ...data.collateral, ...(data.bots || [])].map((x) => x.cg).filter(Boolean).concat("tether"))];
+    setPx({ busy: true, err: null });
+    try {
+      const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=usd,twd`);
+      if (!r.ok) throw new Error();
+      const j = await r.json();
+      const nextPx = { ...data.px };
+      [...data.spot, ...data.collateral, ...(data.bots || [])].forEach((x) => {
+        if (x.cg && j[x.cg]?.usd != null) nextPx[x.sym] = j[x.cg].usd;
+      });
+      save({ ...data, px: nextPx, fx: j.tether?.twd ?? data.fx, pxAt: new Date().toISOString() });
+      setPx({ busy: false, err: null });
+    } catch (e) {
+      setPx({ busy: false, err: "抓不到價格，沿用上次的" });
+    }
+  };
+
+  const searchCoin = async (q) => {
+    if (!q || q.length < 2) return setSearch((p) => ({ ...p, hits: [] }));
+    setSearch((p) => ({ ...p, busy: true }));
+    try {
+      const r = await fetch(`https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(q)}`);
+      const j = await r.json();
+      setSearch({ q, busy: false, hits: (j.coins || []).slice(0, 8) });
+    } catch (e) {
+      setSearch({ q, busy: false, hits: [] });
+    }
+  };
+
+  const save = async (next) => {
+    const clean = migrateState(touchSync(next));
+    setD(clean);
+    await writeBook(clean);
+    scheduleCloudPush(clean, setSyncStatus);
+  };
+  const patch = (p, id, k, v) => save({ ...d, [p]: d[p].map((x) => (x.id === id ? { ...x, [k]: v } : x)) });
+
+  const syncNow = async () => {
+    const cfg = cloudConfig();
+    if (!cfg.url || !cfg.token) {
+      setModal({ type: "cloud", ...cfg, result: "" });
+      return;
+    }
+    const clean = migrateState(touchSync(d));
+    setD(clean);
+    await writeBook(clean);
+    scheduleCloudPush(clean, setSyncStatus, 0);
+  };
+
+  const pullCloudNow = async () => {
+    try {
+      setSyncStatus({ state: "syncing", text: "下載雲端資料…", at: "" });
+      const remote = await cloudJsonp("load");
+      if (!remote?.state) throw new Error("雲端還沒有資料");
+      const clean = migrateState({ ...remote.state, sync: { ...(remote.state.sync || {}), rev: Number(remote.rev || 0), updatedAt: remote.updatedAt || remote.state.sync?.updatedAt || "" } });
+      setD(clean);
+      await writeBook(clean);
+      setSyncStatus({ state: "synced", text: "已從雲端下載", at: remote.updatedAt || "" });
+      return true;
+    } catch (e) {
+      setSyncStatus({ state: "error", text: e?.message || "下載失敗", at: "" });
+      return false;
+    }
+  };
+
+  // ── 共用計算 ──
+  // 可用來付錢的帳戶：排除卡費專戶與共同基金
+  const payAccts = d.cash.filter((c) => !c.excluded && !c.earmark);
+  const methods = [...payAccts.map((c) => ({ k: c.id, n: c.name, card: false, amt: c.amt, cur: c.cur })), ...CARDS.map((c) => ({ ...c, card: true }))];
+  const mName = (k) => d.cash.find((c) => c.id === k)?.name || CARDS.find((c) => c.k === k)?.n || { cash: "現金", cathay: "國泰", esun: "玉山" }[k] || k;
+
+  // 轉帳端點：TWD 帳戶 + 幣安 / 派網 U 餘額。轉帳本身不列收入支出。
+  const transferAccounts = [
+    ...d.cash.filter((c) => !c.excluded && c.cur === "TWD").map((c) => ({ id: c.id, name: c.name, unit: "TWD", balance: Number(c.amt || 0), kind: "bank" })),
+    ...(d.exchanges || []).map((x) => ({ id: x.id, name: x.name, unit: "U", balance: Number(x.u || 0), kind: "exchange" })),
+  ];
+  const transferAcct = (id) => transferAccounts.find((x) => x.id === id);
+  const transferName = (id) => transferAcct(id)?.name || id;
+  const transferUnit = (id) => transferAcct(id)?.unit || "";
+  const transferBalance = (id) => transferAcct(id)?.balance || 0;
+  const accountReferenceCount = (id) =>
+    d.tx.filter((x) => x.method === id || x.payFrom === id).length
+    + (d.sharedTx || []).filter((x) => x.method === id).length
+    + (d.transfers || []).filter((x) => x.from === id || x.to === id).length;
+  const accountDeleteReason = (account) => {
+    if (!account) return "找不到帳戶";
+    if (SYSTEM_CASH_IDS.has(account.id)) return "系統帳戶只能編輯，不能刪除";
+    if (Math.abs(Number(account.amt || 0)) > 0.001) return "請先把帳戶餘額調整為 0";
+    if (accountReferenceCount(account.id) > 0) return "這個帳戶已有歷史帳目，為了保留對帳關係不能刪除";
+    return "";
+  };
+
+  const price = (s) => (s === "USDT" ? 1 : d.px[s] || 0);
+  const t2 = (u) => u * d.fx;
+  const due = (mk) => d.openCard[mk]
+    + d.tx.filter((t) => t.kind === "expense" && t.method === mk).reduce((a, t) => a + t.amount, 0)
+    + (d.sharedTx || []).filter((t) => t.method === mk).reduce((a, t) => a + t.amount, 0)
+    - d.tx.filter((t) => t.kind === "payment" && t.method === mk).reduce((a, t) => a + paymentCardAmount(t), 0);
+
+  // 分期由 nextDue 驅動：繳掉一期就真的扣本金、扣期數，下一期會自動排到下個月。
+  const cardInstallments = (d.loans || []).filter((x) => x.type === "card_installment" || x.card);
+  const dueCyclesFor = (x) => {
+    if (!(Number(x.amt || 0) > 0) || !x.nextDue || !(Number(x.monthly || 0) > 0)) return 0;
+    const diff = monthDiff(x.nextDue, today());
+    if (diff < 0) return 0;
+    return Math.min(Number(x.remainingPeriods || Math.ceil(Number(x.amt || 0) / Number(x.monthly || 1))), diff + 1);
+  };
+  const installmentDueFor = (x) => Math.min(Number(x.amt || 0), dueCyclesFor(x) * Number(x.monthly || 0));
+  const cardInstDue = (mk) => cardInstallments.filter((x) => (x.card || "c_cathay") === mk).reduce((a, x) => a + installmentDueFor(x), 0);
+  const instDue = cardInstDue("c_cathay") + cardInstDue("c_fubon");
+  const payableCard = (mk) => Math.max(0, due(mk)) + cardInstDue(mk);
+  const totalDue = payableCard("c_cathay") + payableCard("c_fubon");
+  // 你習慣先把卡費錢隔離起來，因此本期繳完後，下一期分期會立刻進「準備金目標」。
+  const nextInstallmentReserve = cardInstallments.reduce((a, x) => {
+    if (!(Number(x.amt || 0) > 0) || installmentDueFor(x) > 0) return a;
+    return a + Math.min(Number(x.monthly || 0), Number(x.amt || 0));
+  }, 0);
+  const cardReserveTarget = totalDue + nextInstallmentReserve;
+  const payAcct = d.cash.find((c) => c.earmark);
+  const gap = cardReserveTarget - (payAcct?.amt || 0);
+
+  const fund = d.cash.find((c) => c.excluded);
+  const stx = (d.sharedTx || []).slice().sort((a, b) => b.date.localeCompare(a.date));
+  const owed = stx.reduce((a, t) => a + sharedRemaining(t), 0);
+  const unsettledCount = stx.filter((t) => sharedRemaining(t) > 0.001).length;
+  // 墊付的錢會從共同基金拿回來，算應收，不然淨資產會被低估
+  const cashTWD = d.cash.filter((x) => !x.excluded).reduce((a, x) => a + (x.cur === "USD" ? t2(x.amt) : x.amt), 0) + owed;
+  const exchangeUSD = (d.exchanges || []).reduce((a, x) => a + Number(x.u || 0), 0);
+  const spotUSD = d.spot.reduce((a, x) => a + x.qty * price(x.sym), 0);
+  const botValueUSD = (x) => x.mode === "coin" ? Number(x.qty || 0) * price(x.sym) : Number(x.valueUSD || 0);
+  const botsUSD = (d.bots || []).reduce((a, x) => a + botValueUSD(x), 0);
+  const collGross = d.collateral.reduce((a, x) => a + x.qty * price(x.sym), 0);
+  const pledgeUSD = d.collateral.reduce((a, x) => a + (x.borrow || 0), 0);
+  const collNet = collGross - pledgeUSD;
+  const legacyInvTWD = t2(exchangeUSD + spotUSD + botsUSD + collNet);
+  const portfolioRows = (d.portfolioAssets || []).map((x, i) => {
+    const qty = Math.max(0, Number(x.qty || 0));
+    const currentPrice = Math.max(0, Number(x.price || 0));
+    const avgCost = Math.max(0, Number(x.cost || 0));
+    const currency = String(x.cur || "TWD").toUpperCase();
+    const fxRate = currency === "TWD" ? 1 : Number(d.fx || 0);
+    const valueTWD = qty * currentPrice * fxRate;
+    const costTWD = qty * avgCost * fxRate;
+    const pnlTWD = valueTWD - costTWD;
+    return { ...x, qty, currentPrice, avgCost, currency, valueTWD, costTWD, pnlTWD, color: assetType(x.assetClass).c || PALETTE[i % PALETTE.length] };
+  }).sort((a, b) => b.valueTWD - a.valueTWD);
+  const includedPortfolioRows = portfolioRows.filter((x) => x.included !== false);
+  const customInvTWD = includedPortfolioRows.reduce((a, x) => a + x.valueTWD, 0);
+  const knownCostRows = includedPortfolioRows.filter((x) => x.costTWD > 0);
+  const customPnlTWD = knownCostRows.reduce((a, x) => a + x.pnlTWD, 0);
+  const invTWD = legacyInvTWD + customInvTWD;
+  // 卡分期中已列入「應付卡費」的部分，不再重複算進貸款本金。
+  const loanTWD = Math.max(0, d.loans.reduce((a, x) => a + (x.cur === "USD" ? t2(x.amt) : x.amt), 0) - instDue);
+  const biz = d.biz || { invested: 0, recovered: 0, profit: 0, log: [] };
+  const bizOut = Number(biz.invested || 0) - Number(biz.recovered || 0);
+  // 卡牌事業獨立管理，不計入個人總資產或淨資產。
+  const assetTWD = cashTWD + invTWD;
+  const net = assetTWD - loanTWD - totalDue;
+  // 槓桿比例用毛額當分母，質押借款也是真的借來的錢
+  const grossTWD = cashTWD + t2(exchangeUSD + spotUSD + botsUSD + collGross) + customInvTWD;
+  const borrowTotal = loanTWD + t2(pledgeUSD);
+  const borrowedPct = grossTWD > 0 ? (borrowTotal / grossTWD) * 100 : 0;
+  const yearInt =
+    d.loans.reduce((a, x) => a + ((x.cur === "USD" ? t2(x.amt) : x.amt) * x.rate) / 100, 0) +
+    d.collateral.reduce((a, x) => a + (t2(x.borrow || 0) * (x.rate || 0)) / 100, 0);
+  const ltvOf = (c) => { const v = c.qty * price(c.sym); return v > 0 ? ((c.borrow || 0) / v) * 100 : 0; };
+
+  // 持倉合併（現貨 + 理財抵押，同幣種相加）
+  const holdMap = {};
+  [...d.spot, ...d.collateral].forEach((x) => { holdMap[x.sym] = (holdMap[x.sym] || 0) + x.qty * price(x.sym); });
+  if (exchangeUSD > 0) holdMap.USDT = (holdMap.USDT || 0) + exchangeUSD;
+  (d.bots || []).forEach((x) => {
+    const k = x.mode === "coin" ? x.sym : `${x.sym} 網格`;
+    holdMap[k] = (holdMap[k] || 0) + botValueUSD(x);
+  });
+  const holdTot = Object.values(holdMap).reduce((a, b) => a + b, 0);
+  const holdings = Object.entries(holdMap)
+    .map(([sym, v]) => ({ sym, v, pct: holdTot ? (v / holdTot) * 100 : 0 }))
+    .sort((a, b) => b.v - a.v);
+  const riskPct = holdTot ? ((holdTot - (holdMap.USDT || 0)) / holdTot) * 100 : 0;
+  const allocationRows = [
+    ...includedPortfolioRows.map((x) => ({ k: x.id, n: x.name, color: x.color, v: x.valueTWD })),
+    ...(legacyInvTWD > 0 ? [{ k: "legacy-crypto", n: "Crypto／交易所", color: C.teal, v: legacyInvTWD }] : []),
+  ].sort((a, b) => b.v - a.v);
+  const allocationTotal = allocationRows.reduce((a, x) => a + x.v, 0);
+  const allocationLegend = allocationRows.map((x) => ({ ...x, pct: allocationTotal > 0 ? x.v / allocationTotal * 100 : 0 }));
+  const portfolioGroups = [...new Set(portfolioRows.map((x) => String(x.group || "未分組").trim() || "未分組"))];
+
+  const smtx = stx.filter((t) => ym(t.date) === month);
+  const sSpent = smtx.reduce((a, t) => a + t.amount, 0);
+  const sByCat = SHARED_CATS.map((c) => ({ ...c, v: smtx.filter((t) => t.cat === c.k).reduce((a, t) => a + t.amount, 0) })).filter((c) => c.v > 0).sort((a, b) => b.v - a.v);
+
+  const months = [...new Set([month, ...d.tx.map((t) => ym(t.date)), ...(d.transfers || []).map((t) => ym(t.date)), ...(d.sharedTx || []).map((t) => ym(t.date))])].sort().reverse();
+  const mtx = d.tx.filter((t) => ym(t.date) === month).sort((a, b) => b.date.localeCompare(a.date));
+  const mTransfers = (d.transfers || []).filter((t) => ym(t.date) === month).sort((a, b) => b.date.localeCompare(a.date) || String(b.id).localeCompare(String(a.id)));
+  const spent = mtx.filter((t) => t.kind === "expense").reduce((a, t) => a + t.amount, 0);
+  const earned = mtx.filter((t) => t.kind === "income").reduce((a, t) => a + t.amount, 0);
+  const byCat = CATS.map((c) => ({ ...c, v: mtx.filter((t) => t.kind === "expense" && t.cat === c.k).reduce((a, t) => a + t.amount, 0) }))
+    .filter((c) => c.v > 0).sort((a, b) => b.v - a.v);
+
+  const cardSpent = mtx.filter((t) => t.kind === "expense" && isCard(t.method)).reduce((a, t) => a + t.amount, 0);
+  const activeLoanMonthly = (d.loans || []).filter((x) => Number(x.amt || 0) > 0).reduce((a, x) => a + Number(x.monthly || 0), 0);
+  const fixedOut = activeLoanMonthly;
+  const outRate = earned > 0 ? (spent / earned) * 100 : null;
+  const loanRate = earned > 0 ? (fixedOut / earned) * 100 : null;
+  const cardRate = spent > 0 ? (cardSpent / spent) * 100 : 0;
+  const personalLoan = (d.loans || []).find((x) => x.type === "personal_loan" || x.id === "l1");
+  const loanDueCycles = personalLoan ? dueCyclesFor(personalLoan) : 0;
+  const loanDueNow = personalLoan ? Math.min(Number(personalLoan.amt || 0), loanDueCycles * Number(personalLoan.monthly || 0)) : 0;
+  const pchomeInst = cardInstallments.find((x) => x.id === "l2") || cardInstallments[0];
+  const openDebtEditor = () => setModal({
+    type: "editDebt",
+    cathayDue: String(Math.round(Math.max(0, due("c_cathay")))),
+    fubonDue: String(Math.round(Math.max(0, due("c_fubon")))),
+    instAmt: String(Math.round(Number(pchomeInst?.amt || 0))),
+    instPeriods: String(Math.max(0, Math.round(Number(pchomeInst?.remainingPeriods || 0)))),
+    instMonthly: String(Math.round(Number(pchomeInst?.monthly || 0))),
+    instNextDue: pchomeInst?.nextDue || "",
+  });
+
+  const add = () => {
+    const amt = parseFloat(f.amount);
+    if (!amt || amt <= 0) return;
+
+    if (editId && kind !== "shared") {
+      const old = d.tx.find((t) => t.id === editId);
+      if (!old || old.kind === "payment" || old.kind === "loan_payment") return;
+      // 先回沖舊帳對帳戶的影響，再套用修改後的新帳。刷卡本來就不動銀行餘額。
+      let cash2 = adjust(d.cash, old.method, old.kind === "income" ? -Number(old.amount || 0) : Number(old.amount || 0));
+      cash2 = adjust(cash2, f.method, kind === "income" ? amt : -amt);
+      const updated = { ...old, kind, amount: amt, cat: f.cat, method: f.method, date: f.date, note: f.note };
+      save({ ...d, cash: cash2, tx: d.tx.map((t) => t.id === editId ? updated : t) });
+    } else {
+      const delta = kind === "income" ? amt : -amt;
+      const cash2 = adjust(d.cash, f.method, delta);
+      if (kind === "shared") {
+        save({ ...d, cash: cash2, sharedTx: [{ id: "s" + Date.now(), amount: amt, cat: f.cat, method: f.method, date: f.date, note: f.note, settled: false, settledAmount: 0 }, ...(d.sharedTx || [])] });
+      } else {
+        save({ ...d, cash: cash2, tx: [{ id: "t" + Date.now(), kind, amount: amt, cat: f.cat, method: f.method, date: f.date, note: f.note }, ...d.tx] });
+      }
+    }
+    setEditId(null);
+    setF({ ...f, amount: "", note: "" });
+    setSheet(false);
+  };
+
+  const editTx = (t) => {
+    if (!t || t.kind === "payment" || t.kind === "loan_payment") return;
+    setEditId(t.id);
+    setKind(t.kind);
+    setF({ amount: String(t.amount || ""), cat: t.cat || (t.kind === "income" ? "base" : "other"), method: t.method || "c1", date: t.date || today(), note: t.note || "" });
+    setSheet(true);
+  };
+
+  const runTransfer = () => {
+    if (!modal || modal.type !== "move") return;
+    const from = transferAcct(modal.from), to = transferAcct(modal.to);
+    if (!from || !to || from.id === to.id) return;
+    const sent = parseFloat(modal.fromAmount);
+    if (!(sent > 0)) return;
+    const sameTWD = from.unit === "TWD" && to.unit === "TWD";
+    const received = sameTWD ? sent : parseFloat(modal.toAmount);
+    if (!(received > 0)) return;
+
+    let cash = d.cash.map((c) => {
+      let amt = Number(c.amt || 0);
+      if (c.id === from.id) amt -= sent;
+      if (c.id === to.id) amt += received;
+      return amt === Number(c.amt || 0) ? c : { ...c, amt };
+    });
+    let exchanges = (d.exchanges || []).map((x) => {
+      let u = Number(x.u || 0);
+      if (x.id === from.id) u -= sent;
+      if (x.id === to.id) u += received;
+      return u === Number(x.u || 0) ? x : { ...x, u };
+    });
+
+    const cross = from.unit !== to.unit;
+    const uAmount = from.unit === "U" ? sent : to.unit === "U" ? received : 0;
+    const twdAmount = from.unit === "TWD" ? sent : to.unit === "TWD" ? received : 0;
+    const rate = cross && uAmount > 0 ? twdAmount / uAmount : null;
+    const feeU = from.unit === "U" && to.unit === "U" ? Math.max(0, sent - received) : 0;
+    const item = {
+      id: "x" + Date.now(), date: modal.date || today(), from: from.id, to: to.id,
+      fromAmount: sent, toAmount: received, fromUnit: from.unit, toUnit: to.unit,
+      feeU, rate, note: (modal.note || "").trim(),
+    };
+    save({ ...d, cash, exchanges, transfers: [item, ...(d.transfers || [])] });
+    setModal(null);
+  };
+
+  const reverseTransfer = (t) => {
+    const sent = Number(t.fromAmount || 0), received = Number(t.toAmount || 0);
+    const cash = d.cash.map((c) => {
+      let amt = Number(c.amt || 0);
+      if (c.id === t.from) amt += sent;
+      if (c.id === t.to) amt -= received;
+      return amt === Number(c.amt || 0) ? c : { ...c, amt };
+    });
+    const exchanges = (d.exchanges || []).map((x) => {
+      let u = Number(x.u || 0);
+      if (x.id === t.from) u += sent;
+      if (x.id === t.to) u -= received;
+      return u === Number(x.u || 0) ? x : { ...x, u };
+    });
+    save({ ...d, cash, exchanges, transfers: (d.transfers || []).filter((x) => x.id !== t.id) });
+  };
+
+  const settleShared = (list, amount) => {
+    let left = Math.max(0, Number(amount || 0));
+    const updates = new Map();
+    [...(list || [])]
+      .filter((t) => sharedRemaining(t) > 0.001)
+      .sort((a, b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)))
+      .forEach((t) => {
+        if (left <= 0.001) return;
+        const rem = sharedRemaining(t);
+        const pay = Math.min(rem, left);
+        const paid = sharedSettledAmount(t) + pay;
+        const full = paid >= Number(t.amount || 0) - 0.001;
+        updates.set(t.id, { ...t, settledAmount: paid, settled: full, settledDate: full ? today() : t.settledDate });
+        left -= pay;
+      });
+    return (list || []).map((t) => updates.get(t.id) || t);
+  };
+
+  const deleteTx = (t) => {
+    if (!t) return;
+    if (t.kind === "loan_payment") {
+      const periods = Math.max(1, Number(t.periodsPaid || 1));
+      const cash = d.cash.map((c) => c.id === t.payFrom ? { ...c, amt: Number(c.amt || 0) + Number(t.amount || 0) } : c);
+      const loans = d.loans.map((x) => {
+        if (x.id !== t.loanId) return x;
+        const restoredAmt = Math.min(Number(x.originalAmt || Infinity), Number(x.amt || 0) + Number(t.amount || 0));
+        const restoredDue = x.nextDue ? addMonthsYMD(x.nextDue, -periods, x.dueDay || 10) : addMonthsYMD(t.date || today(), 0, x.dueDay || 10);
+        return { ...x, amt: restoredAmt, remainingPeriods: Number(x.remainingPeriods || 0) + periods, nextDue: restoredDue };
+      });
+      save({ ...d, cash, loans, tx: d.tx.filter((x) => x.id !== t.id) });
+      return;
+    }
+    if (t.kind === "payment") {
+      const cash = d.cash.map((c) => c.id === (t.payFrom || "c3") ? { ...c, amt: Number(c.amt || 0) + Number(t.amount || 0) } : c);
+      const instAmt = paymentInstallmentAmount(t);
+      const loans = instAmt > 0 ? d.loans.map((x) => {
+        const target = x.id === (t.installmentLoanId || "l2");
+        if (!target) return x;
+        const monthly = Number(x.monthly || 1180);
+        const periods = Math.max(1, Number(t.installmentPeriodsPaid || Math.ceil(instAmt / (monthly || 1))));
+        const restoredAmt = Math.min(Number(x.originalAmt || Infinity), Number(x.amt || 0) + instAmt);
+        const restoredDue = x.nextDue ? addMonthsYMD(x.nextDue, -periods, x.dueDay || 22) : addMonthsYMD(t.date || today(), 0, x.dueDay || 22);
+        return {
+          ...x, amt: restoredAmt,
+          dueNow: Math.min(monthly, restoredAmt),
+          remainingPeriods: Number(x.remainingPeriods || 0) + periods,
+          nextDue: restoredDue,
+        };
+      }) : d.loans;
+      save({ ...d, cash, loans, tx: d.tx.filter((x) => x.id !== t.id) });
+      return;
+    }
+    save({ ...d,
+      cash: adjust(d.cash, t.method, t.kind === "income" ? -Number(t.amount || 0) : Number(t.amount || 0)),
+      tx: d.tx.filter((x) => x.id !== t.id),
+    });
+  };
+
+  useEffect(() => {
+    if (!loaded) return;
+    const t = today();
+    const debtNow = loanTWD + totalDue;
+    const list = d.snaps || [];
+    const i = list.findIndex((x) => x.date === t);
+    const same = i >= 0 && Math.abs(list[i].net - net) < 1 && Math.abs(list[i].debt - debtNow) < 1;
+    if (same) return;
+    const next = i >= 0 ? list.map((x, j) => (j === i ? { date: t, net, debt: debtNow } : x)) : [...list, { date: t, net, debt: debtNow }];
+    save({ ...d, snaps: next.slice(-90) });
+  }, [loaded, net, loanTWD, totalDue]);
+
+  const S = {
+    card: { background: C.card, border: `1px solid ${C.line}`, borderRadius: 18, marginBottom: 12, boxShadow: "0 10px 30px rgba(0,0,0,.16)" },
+    lbl: { fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontWeight: 750, fontSize: 12, letterSpacing: "0.045em", color: C.dim },
+    inp: { background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12, color: C.text, fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontWeight: 600, fontSize: 15, padding: "13px 14px", width: "100%", outline: "none" },
+    chip: (on, col) => ({ background: on ? col : C.soft, border: `1px solid ${on ? col : C.line}`, borderRadius: 999, color: on ? "#fff" : C.text, fontWeight: 700, fontSize: 13.5, padding: "9px 14px", cursor: "pointer", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif" }),
+    row: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "13px 0", borderTop: `1px solid ${C.line}`, gap: 10 },
+    sub: { fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontWeight: 550, fontSize: 11.5, color: C.dim, marginTop: 4 },
+  };
+
+  if (!loaded) return <div style={{ background: C.bg, minHeight: "100vh", padding: 40, color: C.dim, fontFamily: "monospace" }}>載入中…</div>;
+
+  return (
+    <div style={{ background: C.bg, minHeight: "100vh", color: C.text, padding: "calc(env(safe-area-inset-top) + 14px) 14px 112px" }}>
+      {quickMsg && (
+        <div style={{ position: "fixed", top: "calc(env(safe-area-inset-top) + 10px)", left: "50%", transform: "translateX(-50%)", zIndex: 60, width: "calc(100% - 26px)", maxWidth: 434, background: C.ink, color: "#fff", borderRadius: 10, padding: "12px 14px", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontSize: 12.5, boxShadow: "0 8px 24px rgba(0,0,0,.14)" }}>
+          {quickMsg}
+        </div>
+      )}
+      <style>{`
+        *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+        html,body,#root{background:${C.bg};color:${C.text}}
+        body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif;font-weight:560}
+        button,input,textarea{font:inherit}
+        button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid ${C.ink};outline-offset:2px}
+        ::placeholder{color:#68717D}
+        input[type=date]{color-scheme:dark}
+        *{font-variant-numeric:tabular-nums}
+      `}</style>
+
+      <div style={{ maxWidth: 480, margin: "0 auto", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif" }}>
+        {/* TABS */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16, padding: 4, background: C.card, border: `1px solid ${C.line}`, borderRadius: 16 }}>
+          <button onClick={() => setTab("ledger")} style={{ ...S.chip(tab === "ledger", C.ink), flex: 1, borderRadius: 12, padding: "11px", border: "none" }}>記帳</button>
+          <button onClick={() => setTab("shared")} style={{ ...S.chip(tab === "shared", C.purple), flex: 1, borderRadius: 12, padding: "11px", border: "none" }}>共同</button>
+          <button onClick={() => setTab("assets")} style={{ ...S.chip(tab === "assets", C.ink), flex: 1, borderRadius: 12, padding: "11px", border: "none" }}>資產</button>
+        </div>
+
+        {tab === "ledger" && (<>
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12 }}>
+            {months.map((m) => <button key={m} onClick={() => setMonth(m)} style={S.chip(m === month, C.teal)}>{m.replace("-", "/")}</button>)}
+          </div>
+
+          <div style={{ ...S.card, padding: "15px 17px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+              <div style={S.lbl}>我的錢包</div>
+              <button onClick={() => setTab("assets")} style={{ background: "none", border: "none", color: C.ink, fontWeight: 750, fontSize: 11.5, cursor: "pointer", padding: 0 }}>查看全部 →</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+              {["c1", "c2", "c4"].map((id) => {
+                const a = d.cash.find((x) => x.id === id);
+                if (!a) return null;
+                const shortName = id === "c2" ? "國泰" : a.name;
+                return (
+                  <div key={id} style={{ minWidth: 0, padding: "12px 10px", background: C.soft, border: `1px solid ${C.line}`, borderRadius: 13 }}>
+                    <div style={{ fontSize: 11.5, color: C.dim, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{shortName}</div>
+                    <div style={{ marginTop: 6, fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Display','PingFang TC','Noto Sans TC',sans-serif", fontSize: 20, lineHeight: 1.05, fontWeight: 850, letterSpacing: "-0.02em", whiteSpace: "nowrap" }}>{nf(a.amt)}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+              <div>
+                <div style={{ fontSize: 11.5, color: C.dim, fontWeight: 700 }}>可流動資產</div>
+                <div style={{ marginTop: 3, fontSize: 10.5, color: C.dim }}>現金 + 國泰 + 玉山</div>
+              </div>
+              <div style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Display','PingFang TC','Noto Sans TC',sans-serif", fontSize: 24, lineHeight: 1, fontWeight: 900, letterSpacing: "-0.025em", color: C.text, whiteSpace: "nowrap" }}>
+                {nf(["c1", "c2", "c4"].reduce((sum, id) => sum + Number(d.cash.find((x) => x.id === id)?.amt || 0), 0))}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ ...S.card, padding: "18px 17px" }}>
+            <div style={S.lbl}>本月支出</div>
+            <div style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Display','PingFang TC','Noto Sans TC',sans-serif", fontWeight: 800, fontSize: 42, lineHeight: 1.1, marginTop: 3, color: C.out }}>{nf(spent)}</div>
+            <div style={{ display: "flex", gap: 22, marginTop: 14, paddingTop: 13, borderTop: `1px solid ${C.line}` }}>
+              <div><div style={{ color: C.dim, fontSize: 10.5 }}>收入</div><div style={{ color: C.inc, fontSize: 16, marginTop: 2 }}>{nf(earned)}</div></div>
+              <div><div style={{ color: C.dim, fontSize: 10.5 }}>結餘</div><div style={{ color: earned - spent >= 0 ? C.inc : C.out, fontSize: 16, marginTop: 2 }}>{earned - spent >= 0 ? "+" : ""}{nf(earned - spent)}</div></div>
+              <div><div style={{ color: C.dim, fontSize: 10.5 }}>固定月付</div><div style={{ color: C.dim, fontSize: 16, marginTop: 2 }}>{nf(fixedOut)}</div></div>
+            </div>
+          </div>
+
+          <div style={{ ...S.card, padding: "15px 17px", borderColor: gap > 0 ? C.amber : C.line }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <div style={S.lbl}>應付卡費</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <button onClick={openDebtEditor} style={{ ...S.chip(false, C.ink), padding: "6px 9px", borderRadius: 8, fontSize: 11.5 }}>調整</button>
+                <div style={{ fontSize: 19, color: C.amber }}>{nf(totalDue)}</div>
+              </div>
+            </div>
+            <div style={{ marginTop: 10, fontSize: 12, color: C.dim, lineHeight: 1.9 }}>
+              國泰卡 {nf(payableCard("c_cathay"))} · 每月 <b style={{ color: C.text }}>22</b> 號繳
+              <span style={{ color: C.dim }}>（一般 {nf(Math.max(0, due("c_cathay")))} + 本期分期 {nf(cardInstDue("c_cathay"))}）</span>
+              <br />富邦卡 {nf(payableCard("c_fubon"))} · 每月 <b style={{ color: C.text }}>4</b> 號繳
+              {pchomeInst && <><br />PCHOME 分期餘 <span style={{ color: C.text }}>{nf(pchomeInst.amt)}</span> · 剩 <span style={{ color: C.text }}>{nf(pchomeInst.remainingPeriods)}</span> 期
+                · {cardInstDue("c_cathay") > 0 ? "本期" : "下期預列"} {nf(Math.min(Number(pchomeInst.monthly || 0), Number(pchomeInst.amt || 0)))} / {md(pchomeInst.nextDue)}</>}
+              <br />卡費帳戶 {nf(payAcct?.amt || 0)} · 準備金目標 {nf(cardReserveTarget)}
+            </div>
+            {gap > 0 && <div style={{ marginTop: 10, padding: "10px 12px", background: "#241D10", borderRadius: 12, fontSize: 12.5, color: "#F1C86C" }}>卡費準備金尚缺 <b>{nf(gap)}</b>{nextInstallmentReserve > 0 ? ` · 已把下期分期 ${nf(nextInstallmentReserve)} 預留進去` : ""}</div>}
+            <div style={{ display: "flex", gap: 7, marginTop: 11 }}>
+              <button onClick={() => setModal({ type: "transfer", amount: String(gap > 0 ? Math.round(gap) : 0), from: d.cash.find((c) => !c.earmark && !c.excluded && c.cur === "TWD")?.id })}
+                style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 8, padding: "10px" }}>轉入</button>
+              <button disabled={!(totalDue > 0)} onClick={() => setModal({ type: "pay", card: payableCard("c_cathay") > 0 ? "c_cathay" : "c_fubon", amount: String(Math.round(payableCard("c_cathay") > 0 ? payableCard("c_cathay") : payableCard("c_fubon"))), from: "c3" })}
+                style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 8, padding: "10px", opacity: totalDue > 0 ? 1 : .5 }}>{totalDue > 0 ? "繳卡費" : "本期已繳"}</button>
+            </div>
+          </div>
+
+          {personalLoan && (
+            <div style={{ ...S.card, padding: "15px 17px", borderColor: loanDueNow > 0 ? C.teal : C.line }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <div style={S.lbl}>信貸還款</div>
+                <div style={{ fontSize: 19, color: loanDueNow > 0 ? C.teal : C.text }}>{nf(personalLoan.amt)}</div>
+              </div>
+              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div style={{ padding: "10px 11px", background: C.soft, borderRadius: 11 }}>
+                  <div style={S.sub}>每月還款</div>
+                  <div style={{ marginTop: 3, fontSize: 17, fontWeight: 850 }}>{nf(personalLoan.monthly)}</div>
+                </div>
+                <div style={{ padding: "10px 11px", background: C.soft, borderRadius: 11 }}>
+                  <div style={S.sub}>剩餘期數</div>
+                  <div style={{ marginTop: 3, fontSize: 17, fontWeight: 850 }}>{nf(personalLoan.remainingPeriods)} 期</div>
+                </div>
+              </div>
+              <div style={{ marginTop: 10, fontSize: 12, color: C.dim, lineHeight: 1.8 }}>
+                每月 <b style={{ color: C.text }}>10</b> 號繳 · {loanDueNow > 0 ? <>本期應繳 <span style={{ color: C.teal, fontWeight: 850 }}>{nf(loanDueNow)}</span></> : <>下一期 <span style={{ color: C.text }}>{md(personalLoan.nextDue)}</span> · {nf(Math.min(Number(personalLoan.monthly || 0), Number(personalLoan.amt || 0)))}</>}
+              </div>
+              <button disabled={!(loanDueNow > 0)} onClick={() => setModal({ type: "loanPay", loanId: personalLoan.id, amount: String(Math.round(Math.min(Number(personalLoan.monthly || 0), Number(personalLoan.amt || 0)))), from: "c2" })}
+                style={{ ...S.chip(loanDueNow > 0, C.teal), width: "100%", borderRadius: 9, padding: "11px", marginTop: 11, opacity: loanDueNow > 0 ? 1 : .55 }}>
+                {loanDueNow > 0 ? "繳信貸" : "本期已繳"}
+              </button>
+            </div>
+          )}
+
+          {(spent > 0 || earned > 0) && (
+            <div style={{ ...S.card, padding: "15px 17px" }}>
+              <div style={{ ...S.lbl, marginBottom: 13 }}>本月比例</div>
+              {outRate !== null && (
+                <>
+                  <div style={{ display: "flex", height: 9, borderRadius: 3, overflow: "hidden", background: C.bg, marginBottom: 8 }}>
+                    <div style={{ width: `${Math.min(100, outRate)}%`, background: C.out }} />
+                    <div style={{ width: `${Math.max(0, 100 - outRate)}%`, background: C.inc }} />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, marginBottom: 14 }}>
+                    <span style={{ color: C.out }}>花掉 {nf(outRate, 1)}%</span>
+                    <span style={{ color: outRate > 100 ? C.out : C.inc }}>存下 {nf(100 - outRate, 1)}%</span>
+                  </div>
+                </>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, fontSize: 12 }}>
+                <div style={{ padding: "10px 12px", background: C.bg, borderRadius: 8 }}>
+                  <div style={{ color: C.dim, fontSize: 10.5 }}>刷卡佔支出</div>
+                  <div style={{ fontSize: 17, color: C.amber, marginTop: 3 }}>{nf(cardRate, 1)}%</div>
+                  <div style={{ color: C.dim, fontSize: 10.5, marginTop: 2 }}>{nf(cardSpent)}</div>
+                </div>
+                <div style={{ padding: "10px 12px", background: C.bg, borderRadius: 8 }}>
+                  <div style={{ color: C.dim, fontSize: 10.5 }}>固定月付佔收入</div>
+                  <div style={{ fontSize: 17, color: loanRate === null ? C.dim : loanRate > 15 ? C.out : C.text, marginTop: 3 }}>
+                    {loanRate === null ? "—" : `${nf(loanRate, 1)}%`}
+                  </div>
+                  <div style={{ color: C.dim, fontSize: 10.5, marginTop: 2 }}>{nf(fixedOut)}</div>
+                </div>
+              </div>
+              {outRate !== null && outRate > 100 && (
+                <div style={{ marginTop: 11, padding: "10px 12px", background: "#261516", borderRadius: 12, fontSize: 12.5, color: "#FF9A9A" }}>
+                  這個月花的比賺的多 {nf(spent - earned)}
+                </div>
+              )}
+            </div>
+          )}
+
+          {byCat.length > 0 && (
+            <div style={{ ...S.card, padding: "15px 17px" }}>
+              <div style={{ ...S.lbl, marginBottom: 12 }}>本月分類</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <Donut
+                  data={byCat.map((c) => ({ k: c.k, color: c.c, v: c.v }))}
+                  center={nf(spent)} sub="TWD"
+                />
+                <Legend data={byCat.map((c) => ({ k: c.k, n: c.n, color: c.c, v: c.v, pct: (c.v / spent) * 100 }))} />
+              </div>
+            </div>
+          )}
+
+          {mTransfers.length > 0 && (
+            <div style={{ ...S.card, padding: "16px 17px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <div style={S.lbl}>轉帳紀錄 · {mTransfers.length} 筆</div>
+                <div style={{ fontSize: 11.5, color: C.dim }}>不計收入支出</div>
+              </div>
+              {mTransfers.map((t) => {
+                const cross = t.fromUnit !== t.toUnit;
+                const fee = Number(t.feeU || 0);
+                return (
+                  <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "13px 0", borderTop: `1px solid ${C.line}` }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 10, background: C.soft, display: "grid", placeItems: "center", color: C.teal, fontSize: 16, flexShrink: 0 }}>⇄</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700 }}>{transferName(t.from)} → {transferName(t.to)}</div>
+                      <div style={S.sub}>
+                        {t.date.slice(5).replace("-", "/")}
+                        {cross && t.rate ? ` · 匯率 ${nf(t.rate, 2)} TWD/U` : ""}
+                        {fee > 0 ? ` · 手續費 ${nf(fee, 2)} U` : ""}
+                        {t.note ? ` · ${t.note}` : ""}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right", fontWeight: 750, fontSize: 13.5 }}>
+                      <div>{nf(t.fromAmount, t.fromUnit === "U" ? 2 : 0)} {t.fromUnit}</div>
+                      {(cross || Number(t.toAmount) !== Number(t.fromAmount)) && <div style={{ ...S.sub, color: C.teal }}>→ {nf(t.toAmount, t.toUnit === "U" ? 2 : 0)} {t.toUnit}</div>}
+                    </div>
+                    <button onClick={() => setModal({ type: "confirm", msg: `刪除這筆轉帳？${transferName(t.from)} / ${transferName(t.to)} 的餘額會一起回沖。`, run: () => reverseTransfer(t) })}
+                      style={{ background: "none", border: "none", color: C.dim, fontSize: 18, cursor: "pointer", padding: "4px" }}>×</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{ ...S.card, padding: "15px 17px" }}>
+            <div style={{ ...S.lbl, marginBottom: 4 }}>流水 · {mtx.length} 筆</div>
+            {mtx.length === 0 && <div style={{ padding: "26px 0", textAlign: "center", color: C.dim, fontSize: 12.5 }}>這個月還沒記帳。按下面的按鈕開始。</div>}
+            {mtx.map((t) => {
+              const cat = [...CATS, ...INCOME_CATS].find((c) => c.k === t.cat);
+              const loanPay = t.kind === "loan_payment";
+              const pay = t.kind === "payment" || loanPay;
+              return (
+                <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div style={{ width: 3, alignSelf: "stretch", borderRadius: 2, background: loanPay ? C.teal : isCard(t.method) ? C.amber : t.kind === "income" ? C.inc : C.line }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5 }}>{loanPay ? "繳 信貸" : pay ? `繳 ${mName(t.method)}` : cat?.n}{t.note ? ` · ${t.note}` : ""}</div>
+                    <div style={{ fontSize: 10.5, color: C.dim, marginTop: 3 }}>{t.date.slice(5).replace("-", "/")} · {loanPay ? `${mName(t.payFrom)} → 信貸` : pay ? `${mName(t.payFrom || "c3")} → ${mName(t.method)}` : mName(t.method)}</div>
+                  </div>
+                  <div style={{ fontSize: 15, color: pay ? C.dim : t.kind === "income" ? C.inc : C.text }}>{t.kind === "income" ? "+" : pay ? "" : "−"}{nf(t.amount)}</div>
+                  {!pay && <button onClick={() => editTx(t)} aria-label="修改這筆帳" title="修改"
+                    style={{ background: "none", border: "none", color: C.ink, fontSize: 16, cursor: "pointer", padding: "4px 2px" }}>✎</button>}
+                  <button onClick={() => setModal({ type: "confirm", msg: `刪除這筆 ${nf(t.amount)}？帳戶與還款進度會一起回沖。`, run: () => deleteTx(t) })}
+                    style={{ background: "none", border: "none", color: C.dim, fontSize: 17, cursor: "pointer" }}>×</button>
+                </div>
+              );
+            })}
+          </div>
+        </>)}
+
+        {tab === "shared" && (<>
+          <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 12 }}>
+            {months.map((m) => <button key={m} onClick={() => setMonth(m)} style={S.chip(m === month, C.purple)}>{m.replace("-", "/")}</button>)}
+          </div>
+
+          <div style={{ ...S.card, padding: "18px 17px", borderColor: owed > 0 ? C.purple : C.line }}>
+            <div style={S.lbl}>我已墊付 · 待結算</div>
+            <div style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Display','PingFang TC','Noto Sans TC',sans-serif", fontWeight: 800, fontSize: 42, lineHeight: 1.1, marginTop: 3, color: owed > 0 ? C.purple : C.dim }}>{nf(owed)}</div>
+            <div style={{ fontSize: 12, color: C.dim, marginTop: 10, lineHeight: 1.9 }}>
+              未結算 {unsettledCount} 筆
+              <br />共同基金餘額 <span style={{ color: (fund?.amt || 0) < owed ? C.out : C.text }}>{nf(fund?.amt || 0)}</span>
+            </div>
+            {owed > (fund?.amt || 0) && (
+              <div style={{ marginTop: 11, padding: "10px 12px", background: "#261516", borderRadius: 12, fontSize: 12.5, color: "#FF9A9A", lineHeight: 1.7 }}>
+                基金不夠付墊款，還差 {nf(owed - (fund?.amt || 0))}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 7, marginTop: 12 }}>
+              <button onClick={() => setModal({ type: "topup", amount: "" })} style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 8, padding: "10px" }}>存入基金</button>
+              <button onClick={() => owed > 0 && setModal({ type: "settle", amount: String(Math.round(owed)), to: d.cash.find((c) => !c.earmark && !c.excluded && c.cur === "TWD")?.id })}
+                style={{ ...S.chip(owed > 0, C.purple), flex: 1, borderRadius: 8, padding: "10px", opacity: owed > 0 ? 1 : 0.45 }}>結算</button>
+            </div>
+          </div>
+
+          {sByCat.length > 0 && (
+            <div style={{ ...S.card, padding: "15px 17px" }}>
+              <div style={{ ...S.lbl, marginBottom: 12 }}>本月共同開銷</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <Donut data={sByCat.map((c) => ({ k: c.k, color: c.c, v: c.v }))} center={nf(sSpent)} sub="TWD" />
+                <Legend data={sByCat.map((c) => ({ k: c.k, n: c.n, color: c.c, v: c.v, pct: (c.v / sSpent) * 100 }))} />
+              </div>
+            </div>
+          )}
+
+          <div style={{ ...S.card, padding: "15px 17px" }}>
+            <div style={{ ...S.lbl, marginBottom: 4 }}>共同流水 · {smtx.length} 筆</div>
+            {smtx.length === 0 && <div style={{ padding: "26px 0", textAlign: "center", color: C.dim, fontSize: 12.5, lineHeight: 1.8 }}>還沒有共同開銷。<br />你先付的錢記在這裡，結算時一次跟基金拿回來。</div>}
+            {smtx.map((t) => {
+              const cat = SHARED_CATS.find((c) => c.k === t.cat);
+              const rem = sharedRemaining(t);
+              const paid = sharedSettledAmount(t);
+              const full = rem <= 0.001;
+              const status = full ? "已結算" : paid > 0 ? `已結 ${nf(paid)} · 待 ${nf(rem)}` : "待結算";
+              return (
+                <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 0", borderTop: `1px solid ${C.line}` }}>
+                  <div style={{ width: 3, alignSelf: "stretch", borderRadius: 2, background: full ? C.line : C.purple }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, color: full ? C.dim : C.text }}>{cat?.n}{t.note ? ` · ${t.note}` : ""}</div>
+                    <div style={{ fontSize: 10.5, color: C.dim, marginTop: 3 }}>{t.date.slice(5).replace("-", "/")} · {mName(t.method)} · {status}</div>
+                  </div>
+                  <div style={{ fontSize: 15, color: full ? C.dim : C.text }}>{nf(t.amount)}</div>
+                  <button onClick={() => setModal({ type: "confirm", msg: `刪除這筆 ${nf(t.amount)}？帳戶餘額會一起回沖。`, run: () => save({ ...d, cash: adjust(d.cash, t.method, t.amount), sharedTx: d.sharedTx.filter((x) => x.id !== t.id) }) })}
+                    style={{ background: "none", border: "none", color: C.dim, fontSize: 17, cursor: "pointer" }}>×</button>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ ...S.card, padding: "13px 15px", fontSize: 11.5, color: C.dim, lineHeight: 1.9 }}>
+            這裡的開銷<b style={{ color: C.text }}>不算你的個人支出</b>，因為結算後會拿回來。<br />
+            但刷卡那幾筆<b style={{ color: C.amber }}>會進應付卡費</b>，卡帳還是你的。
+          </div>
+        </>)}
+
+        {tab === "assets" && (<>
+          <div style={{ ...S.card, padding: "18px 17px" }}>
+            <div style={S.lbl}>淨資產 · TWD</div>
+            <div style={{ fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Display','PingFang TC','Noto Sans TC',sans-serif", fontWeight: 800, fontSize: 42, lineHeight: 1.1, marginTop: 3 }}>{nf(net)}</div>
+            {d.assetCalibratedAt && <div style={{ marginTop: 6, fontSize: 10.5, color: C.dim }}>09/10 已依你提供的銀行、現金與交易所截圖校正</div>}
+            <div style={{ marginTop: 5, fontSize: 11, color: C.dim }}>總資產 <span style={{ color: C.text }}>{nf(assetTWD)}</span> · 總負債 <span style={{ color: C.amber }}>{nf(loanTWD + totalDue)}</span></div>
+            <div style={{ marginTop: 15 }}>
+              <div style={{ display: "flex", height: 9, borderRadius: 3, overflow: "hidden", background: C.bg }}>
+                <div style={{ width: `${Math.max(0, 100 - borrowedPct)}%`, background: C.teal }} />
+                <div style={{ width: `${Math.min(100, borrowedPct)}%`, background: C.amber }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 7, fontSize: 11.5 }}>
+                <span style={{ color: C.teal }}>自有 {nf(100 - borrowedPct, 1)}%</span>
+                <span style={{ color: C.amber }}>借來 {nf(borrowedPct, 1)}%</span>
+              </div>
+              <div style={{ fontSize: 10.5, color: C.dim, marginTop: 6 }}>連質押一起算，借來的共 {nf(borrowTotal)}</div>
+            </div>
+          </div>
+
+          <div style={{ ...S.card, padding: "16px 15px 10px" }}>
+            <div style={{ ...S.lbl, marginBottom: 10, paddingLeft: 2 }}>資產走勢</div>
+            {(d.snaps || []).length >= 2 && (() => {
+              const sp = d.snaps, a = sp[0], b = sp[sp.length - 1];
+              const dn = b.net - a.net, dd = b.debt - a.debt;
+              return (
+                <div style={{ fontSize: 12, lineHeight: 1.9, marginBottom: 12, paddingLeft: 2 }}>
+                  <div style={{ color: C.dim, fontSize: 11 }}>{a.date.replace(/-/g, "/")} 至 {b.date.replace(/-/g, "/")}</div>
+                  <div>淨資產 <span style={{ color: dn >= 0 ? C.inc : C.out }}>{dn >= 0 ? "+" : ""}{nf(dn)}</span>（{a.net ? nf((dn / Math.abs(a.net)) * 100, 1) : "—"}%）</div>
+                  <div>負債 <span style={{ color: dd > 0 ? C.out : C.inc }}>{dd >= 0 ? "+" : ""}{nf(dd)}</span>（{a.debt ? nf((dd / Math.abs(a.debt)) * 100, 1) : "—"}%）</div>
+                </div>
+              );
+            })()}
+            <Trend snaps={d.snaps} />
+            <div style={{ display: "flex", gap: 14, justifyContent: "center", paddingTop: 6, fontSize: 11, color: C.dim }}>
+              <span><span style={{ display: "inline-block", width: 14, height: 2, background: C.ink, verticalAlign: "middle", marginRight: 5 }} />淨資產</span>
+              <span><span style={{ display: "inline-block", width: 14, height: 2, background: C.amber, verticalAlign: "middle", marginRight: 5 }} />負債</span>
+            </div>
+          </div>
+
+          <div style={{ ...S.card, padding: "15px 17px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
+              <span style={S.lbl}>流動資金 · {nf(cashTWD)}</span>
+              <button onClick={() => setModal({ type: "account", id: "", name: "", amt: "", cur: "TWD", excluded: false, lockedRole: false })}
+                style={{ background: "none", border: "none", color: C.ink, fontSize: 11.5, cursor: "pointer", padding: 0 }}>＋ 新增帳戶</button>
+            </div>
+            {owed > 0 && (
+              <div style={S.row}>
+                <div><div style={{ fontSize: 13.5 }}>共同基金應付我</div><div style={{ ...S.sub, color: C.purple }}>墊款待結算</div></div>
+                <div style={{ fontSize: 15, color: C.purple }}>{nf(owed)}</div>
+              </div>
+            )}
+            {d.cash.map((x) => (
+              <div key={x.id} style={S.row}>
+                <button onClick={() => setModal({ type: "account", id: x.id, name: x.name || "", amt: String(x.amt ?? ""), cur: x.cur || "TWD", excluded: !!x.excluded, lockedRole: !!x.earmark || x.id === "c7" })} style={{ flex: 1, minWidth: 0, background: "none", border: "none", color: "inherit", padding: 0, cursor: "pointer", textAlign: "left" }}><div style={{ fontSize: 13.5, color: x.excluded ? C.dim : C.text }}>{x.name} <span style={{ color: C.dim, fontSize: 10 }}>✎</span></div>{x.earmark && <div style={S.sub}>專款 · 只繳卡費</div>}{x.pending && <div style={{ ...S.sub, color: C.amber }}>{x.pending}</div>}{x.note && <div style={S.sub}>{x.note}</div>}{x.cur === "USD" && <div style={S.sub}>× {d.fx}</div>}</button>
+                <div style={{ textAlign: "right" }}>
+                  <Num value={x.amt} dec={x.cur === "USD" ? 2 : 0} suffix={x.cur === "USD" ? " U" : ""} onChange={(v) => patch("cash", x.id, "amt", v)} color={x.excluded ? C.dim : x.earmark ? C.amber : C.text} />
+                  {x.cur === "USD" && <div style={S.sub}>{nf(t2(x.amt))}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ ...S.card, padding: "16px 17px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 13 }}>
+              <div><div style={S.lbl}>投資組合 · {nf(invTWD)}</div><div style={{ ...S.sub, marginTop: 3 }}>自訂標的＋原有 Crypto，一起計入淨資產</div></div>
+              <button onClick={() => setModal({ type: "asset", id: "", name: "", symbol: "", assetClass: "TW_STOCK", cur: "TWD", qty: "", price: "", cost: "", account: "", group: "核心持倉", included: true })}
+                style={{ background: C.ink, border: "none", borderRadius: 10, color: "#fff", fontWeight: 850, fontSize: 12.5, cursor: "pointer", padding: "9px 11px" }}>＋ 新增標的</button>
+            </div>
+
+            {allocationRows.length > 0 ? <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 15 }}>
+                <div style={{ padding: "11px 10px", background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12 }}>
+                  <div style={{ fontSize: 10.5, color: C.dim }}>自訂標的</div><div style={{ fontSize: 16, fontWeight: 850, marginTop: 4 }}>{nf(customInvTWD)}</div>
+                </div>
+                <div style={{ padding: "11px 10px", background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12 }}>
+                  <div style={{ fontSize: 10.5, color: C.dim }}>Crypto</div><div style={{ fontSize: 16, fontWeight: 850, marginTop: 4 }}>{nf(legacyInvTWD)}</div>
+                </div>
+                <div style={{ padding: "11px 10px", background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12 }}>
+                  <div style={{ fontSize: 10.5, color: C.dim }}>自訂損益</div><div style={{ fontSize: 16, fontWeight: 850, marginTop: 4, color: customPnlTWD >= 0 ? C.inc : C.out }}>{customPnlTWD >= 0 ? "+" : ""}{nf(customPnlTWD)}</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 15 }}>
+                <Donut data={allocationRows} center={nf(allocationTotal)} sub="TWD" />
+                <Legend data={allocationLegend} />
+              </div>
+            </> : (
+              <button onClick={() => setModal({ type: "asset", id: "", name: "", symbol: "", assetClass: "TW_STOCK", cur: "TWD", qty: "", price: "", cost: "", account: "", group: "核心持倉", included: true })}
+                style={{ width: "100%", background: C.soft, border: `1px dashed ${C.line}`, borderRadius: 14, color: C.dim, padding: "24px 14px", marginBottom: 14, cursor: "pointer", lineHeight: 1.8 }}>
+                還沒有自訂標的<br /><span style={{ color: C.ink, fontWeight: 850 }}>新增台股、美股、ETF、基金或任何資產</span>
+              </button>
+            )}
+
+            {portfolioGroups.map((group) => {
+              const rows = portfolioRows.filter((x) => (String(x.group || "未分組").trim() || "未分組") === group);
+              const groupValue = rows.filter((x) => x.included !== false).reduce((a, x) => a + x.valueTWD, 0);
+              return <div key={group} style={{ marginBottom: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 1px 5px", color: C.dim, fontSize: 10.5, letterSpacing: ".08em" }}><span>{group}</span><span>{nf(groupValue)}</span></div>
+                {rows.map((x) => {
+                  const meta = assetType(x.assetClass);
+                  const pnlPct = x.costTWD > 0 ? x.pnlTWD / x.costTWD * 100 : 0;
+                  return <button key={x.id} onClick={() => setModal({ type: "asset", id: x.id, name: x.name || "", symbol: x.symbol || "", assetClass: x.assetClass || "OTHER", cur: x.cur || "TWD", qty: String(x.qty ?? ""), price: String(x.price ?? ""), cost: String(x.cost ?? ""), account: x.account || "", group: x.group || "", included: x.included !== false })}
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, background: C.soft, border: `1px solid ${C.line}`, borderRadius: 13, color: C.text, padding: "11px 12px", marginBottom: 7, cursor: "pointer", textAlign: "left" }}>
+                    <span style={{ width: 34, height: 34, borderRadius: 11, display: "grid", placeItems: "center", background: `${meta.c}22`, color: meta.c, fontSize: 12, fontWeight: 900, flexShrink: 0 }}>{meta.icon}</span>
+                    <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: "block", fontSize: 13.5, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</span><span style={{ display: "block", color: C.dim, fontSize: 10.5, marginTop: 3 }}>{x.symbol || meta.n}{x.account ? ` · ${x.account}` : ""}{x.included === false ? " · 不計淨資產" : ""}</span></span>
+                    <span style={{ textAlign: "right", flexShrink: 0 }}><span style={{ display: "block", fontSize: 13.5, fontWeight: 850 }}>{nf(x.valueTWD)}</span><span style={{ display: "block", color: x.pnlTWD >= 0 ? C.inc : C.out, fontSize: 10.5, marginTop: 3 }}>{x.costTWD > 0 ? `${x.pnlTWD >= 0 ? "+" : ""}${nf(x.pnlTWD)} · ${nf(pnlPct, 1)}%` : `${nf(x.qty, 4)} × ${nf(x.currentPrice, 2)}`}</span></span>
+                  </button>;
+                })}
+              </div>;
+            })}
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "9px 0 10px", borderTop: portfolioRows.length ? `1px solid ${C.line}` : "none" }}>
+              <span style={{ fontSize: 10, color: C.dim, letterSpacing: "0.1em" }}>原有 CRYPTO／交易所</span>
+              <button onClick={() => setModal({ type: "move", from: "c2", to: "ex_binance", fromAmount: "", toAmount: "", date: today(), note: "" })}
+                style={{ background: "none", border: "none", color: C.teal, fontWeight: 750, fontSize: 11.5, cursor: "pointer" }}>⇄ 資金轉帳</button>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginBottom: 14 }}>
+              {(d.exchanges || []).map((x) => (
+                <div key={x.id} style={{ padding: "12px 13px", background: C.soft, border: `1px solid ${C.line}`, borderRadius: 13 }}>
+                  <div style={{ fontSize: 11.5, color: C.dim, fontWeight: 700 }}>{x.name} · 可用 U</div>
+                  <div style={{ marginTop: 5, fontSize: 18, fontWeight: 800 }}><Num value={x.u} dec={2} suffix=" U" onChange={(v) => patch("exchanges", x.id, "u", v)} size={18} /></div>
+                  <div style={{ ...S.sub, marginTop: 4 }}>約 {nf(t2(x.u))} TWD</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
+              <Donut
+                data={holdings.map((h, i) => ({ k: h.sym, color: symColor(h.sym, i), v: h.v }))}
+                center={nf(holdTot)} sub="USD"
+              />
+              <Legend data={holdings.map((h, i) => ({ k: h.sym, n: h.sym, color: symColor(h.sym, i), v: h.v, pct: h.pct }))} />
+            </div>
+            <div style={{ marginTop: 10, padding: "10px 12px", background: C.bg, borderRadius: 8, fontSize: 11.5, color: C.dim, lineHeight: 1.8 }}>
+              有風險部位 <span style={{ color: C.text }}>{nf(riskPct, 1)}%</span> · 穩定幣 {nf(100 - riskPct, 1)}%
+              <br />子彈 {nf(holdMap.USDT || 0)} U（{nf(t2(holdMap.USDT || 0))}）
+              <br />BTC 總計 <span style={{ color: C.text }}>{nf(d.spot.concat(d.collateral).filter((x) => x.sym === "BTC").reduce((a, x) => a + x.qty, 0), 8)}</span> 顆
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "15px 0 1px" }}>
+              <span style={{ fontSize: 10, color: C.dim, letterSpacing: "0.1em" }}>現貨 {nf(spotUSD)} U</span>
+              <button onClick={() => { setSearch({ q: "", busy: false, hits: [] }); setModal({ type: "addCoin", where: "spot", qty: "", cost: "" }); }}
+                style={{ background: "none", border: "none", color: C.ink, fontSize: 11.5, cursor: "pointer", padding: 0 }}>＋ 新增</button>
+            </div>
+            {d.spot.map((x) => {
+              const val = x.qty * price(x.sym), pl = val - x.qty * x.cost, big = price(x.sym) > 1000;
+              return (
+                <div key={x.id} style={S.row}>
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5 }}>{x.sym}</div><div style={S.sub}>成本 {nf(x.cost, big ? 0 : 2)} · 現價 {nf(price(x.sym), big ? 0 : 2)}</div></div>
+                  <div style={{ textAlign: "right" }}>
+                    <Num value={x.qty} dec={big ? 8 : 2} onChange={(v) => patch("spot", x.id, "qty", v)} size={13} />
+                    <div style={{ fontSize: 11, marginTop: 3 }}>{nf(val)} U {x.cost > 0 && x.sym !== "USDT" && <span style={{ color: pl >= 0 ? C.inc : C.out }}>{pl >= 0 ? "+" : ""}{nf(pl)}</span>}</div>
+                  </div>
+                  <button onClick={() => setModal({ type: "confirm", msg: `刪除現貨 ${x.sym}？`, run: () => save({ ...d, spot: d.spot.filter((y) => y.id !== x.id) }) })}
+                    style={{ background: "none", border: "none", color: C.dim, fontSize: 16, cursor: "pointer", paddingLeft: 8 }}>×</button>
+                </div>
+              );
+            })}
+
+            {(d.bots || []).length > 0 && <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "15px 0 1px" }}>
+                <span style={{ fontSize: 10, color: C.dim, letterSpacing: "0.1em" }}>機器人 · 淨值 {nf(botsUSD)} U</span>
+                <span style={{ fontSize: 10.5, color: C.dim }}>依交易所截圖校正</span>
+              </div>
+              {(d.bots || []).map((x) => {
+                const val = botValueUSD(x);
+                const pnl = x.mode === "coin" ? (Number(x.qty || 0) - Number(x.principalQty || 0)) * price(x.sym) : Number(x.valueUSD || 0) - Number(x.principal || 0);
+                return (
+                  <div key={x.id} style={S.row}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5 }}>{x.name}</div>
+                      <div style={S.sub}>{x.leverage ? `${x.leverage}x · ` : ""}{x.mode === "coin" ? `本金 ${nf(x.principalQty, 2)} ${x.sym}` : `本金 ${nf(x.principal, 2)} U`}</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      {x.mode === "coin"
+                        ? <Num value={x.qty} dec={8} onChange={(v) => patch("bots", x.id, "qty", v)} size={13} />
+                        : <Num value={x.valueUSD} dec={2} onChange={(v) => patch("bots", x.id, "valueUSD", v)} size={13} suffix=" U" />}
+                      <div style={{ fontSize: 11, marginTop: 3 }}>{x.mode === "coin" ? `${nf(val)} U · ` : ""}<span style={{ color: pnl >= 0 ? C.inc : C.out }}>{pnl >= 0 ? "+" : ""}{nf(pnl, 2)} U</span></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </>}
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "15px 0 1px" }}>
+              <span style={{ fontSize: 10, color: C.dim, letterSpacing: "0.1em" }}>幣安理財 · 淨值 {nf(collNet)} U</span>
+              <button onClick={() => { setSearch({ q: "", busy: false, hits: [] }); setModal({ type: "addCoin", where: "collateral", qty: "", cost: "" }); }}
+                style={{ background: "none", border: "none", color: C.ink, fontSize: 11.5, cursor: "pointer", padding: 0 }}>＋ 新增</button>
+            </div>
+            {d.collateral.map((x) => {
+              const v = x.qty * price(x.sym), l = ltvOf(x), over = l > 40;
+              return (
+                <div key={x.id} style={{ borderTop: `1px solid ${C.line}`, padding: "11px 0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div><div style={{ fontSize: 13.5 }}>{x.sym}</div><div style={S.sub}>現價 {nf(price(x.sym), x.sym === "BTC" ? 0 : 2)}</div></div>
+                    <div style={{ textAlign: "right" }}>
+                      <Num value={x.qty} dec={8} onChange={(v2) => patch("collateral", x.id, "qty", v2)} size={13} />
+                      <div style={S.sub}>{nf(v)} U</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, fontSize: 11.5 }}>
+                    <span style={{ color: C.dim }}>已借 <Num value={x.borrow} dec={2} onChange={(v2) => patch("collateral", x.id, "borrow", v2)} color={C.amber} size={11.5} /> U · {x.rate}%</span>
+                    <span style={{ color: over ? C.out : C.dim }}>質押率 {nf(l, 1)}%{over ? " ⚠" : ""}</span>
+                  </div>
+                  <div style={{ position: "relative", height: 5, background: C.bg, borderRadius: 3, marginTop: 7 }}>
+                    <div style={{ position: "absolute", inset: 0, width: `${Math.min(100, l * 1.6)}%`, background: over ? C.out : C.inc, borderRadius: 3 }} />
+                    <div style={{ position: "absolute", left: "48%", top: -2, width: 1, height: 9, background: C.dim }} />
+                    <div style={{ position: "absolute", left: "64%", top: -2, width: 1, height: 9, background: C.amber }} />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 2 }}>
+                    <button onClick={() => setModal({ type: "confirm", msg: `刪除理財 ${x.sym}？`, run: () => save({ ...d, collateral: d.collateral.filter((y) => y.id !== x.id) }) })}
+                      style={{ background: "none", border: "none", color: C.dim, fontSize: 11, cursor: "pointer", padding: 0 }}>刪除</button>
+                    <div style={S.sub}>強平 {nf(x.liq)}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ ...S.card, padding: "15px 17px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+              <div style={S.lbl}>事業 · {biz.name}</div>
+              <div style={{ fontSize: 15 }}>{nf(bizOut)}</div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginBottom: 12 }}>
+              <div style={{ padding: "11px 12px", background: C.bg, borderRadius: 8 }}>
+                <div style={{ color: C.dim, fontSize: 10.5 }}>在外資金</div>
+                <div style={{ fontSize: 18, color: bizOut > 0 ? "#C08A2E" : C.dim, marginTop: 3 }}>{nf(bizOut)}</div>
+              </div>
+              <div style={{ padding: "11px 12px", background: C.bg, borderRadius: 8 }}>
+                <div style={{ color: C.dim, fontSize: 10.5 }}>累計毛利</div>
+                <div style={{ fontSize: 18, color: biz.profit > 0 ? C.inc : C.dim, marginTop: 3 }}>{nf(biz.profit)}</div>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 11.5, color: C.dim, lineHeight: 1.9, marginBottom: 12 }}>
+              累計投入 {nf(biz.invested)} · 累計回收 {nf(biz.recovered)}
+              <br />佔股比例 {biz.share == null
+                ? <span style={{ color: C.amber }}>未定</span>
+                : <><Num value={biz.share} dec={1} suffix="%" size={11.5} onChange={(v) => save({ ...d, biz: { ...biz, share: v } })} /></>}
+              {biz.share == null && <button onClick={() => save({ ...d, biz: { ...biz, share: 0 } })} style={{ background: "none", border: "none", color: C.ink, fontSize: 11, cursor: "pointer", textDecoration: "underline", padding: "0 0 0 6px" }}>填入</button>}
+              {biz.invested > 0 && biz.profit > 0 && <><br />報酬率 {nf((biz.profit / biz.invested) * 100, 1)}%</>}
+            </div>
+
+            <div style={{ display: "flex", gap: 7 }}>
+              <button onClick={() => setModal({ type: "bizIn", amount: "", from: d.cash.find((c) => !c.earmark && !c.excluded && c.cur === "TWD")?.id })}
+                style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 8, padding: "10px" }}>投入</button>
+              <button onClick={() => setModal({ type: "bizOut", amount: "", profit: "", to: d.cash.find((c) => !c.earmark && !c.excluded && c.cur === "TWD")?.id })}
+                style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 8, padding: "10px" }}>回收</button>
+            </div>
+
+            {(biz.log || []).length > 0 && (
+              <div style={{ marginTop: 6 }}>
+                {biz.log.slice(0, 6).map((l) => (
+                  <div key={l.id} style={S.row}>
+                    <div>
+                      <div style={{ fontSize: 13 }}>{l.type === "in" ? "投入" : "回收"}{l.note ? ` · ${l.note}` : ""}</div>
+                      <div style={S.sub}>{l.date.slice(5).replace("-", "/")}{l.profit ? ` · 毛利 ${nf(l.profit)}` : ""}</div>
+                    </div>
+                    <div style={{ fontSize: 14, color: l.type === "in" ? "#C08A2E" : C.inc }}>{l.type === "in" ? "−" : "+"}{nf(l.amount)}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ ...S.card, padding: "15px 17px" }}>
+            <div style={{ ...S.lbl, marginBottom: 2 }}>負債 · {nf(loanTWD + totalDue)}</div>
+            {d.loans.map((x) => {
+              const isInst = x.type === "card_installment" || x.card;
+              const nowDue = isInst ? installmentDueFor(x) : (x.id === personalLoan?.id ? loanDueNow : 0);
+              return (
+                <div key={x.id} style={S.row}>
+                  <div>
+                    <div style={{ fontSize: 13.5, color: x.excluded ? C.dim : C.text }}>{x.name}</div>
+                    <div style={S.sub}>
+                      月付 {nf(x.monthly)} · 每月 {nf(x.dueDay || (isInst ? 22 : 10))} 號
+                      {Number.isFinite(Number(x.remainingPeriods)) ? ` · 剩 ${nf(x.remainingPeriods)} 期` : ""}
+                      {x.nextDue ? ` · 下次 ${md(x.nextDue)}` : ""}
+                      {nowDue > 0 ? ` · 本期 ${nf(nowDue)}` : ""}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <Num value={x.amt} onChange={(v) => patch("loans", x.id, "amt", v)} color={C.amber} />
+                    {isInst && <div style={{ ...S.sub, display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 7, marginTop: 3 }}>
+                      <span>卡分期剩餘本金</span>
+                      <button onClick={openDebtEditor} style={{ background: "none", border: "none", color: C.ink, fontSize: 10.5, fontWeight: 800, padding: 0, cursor: "pointer" }}>編輯</button>
+                    </div>}
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ ...S.row, borderTop: `1px solid ${C.line}` }}>
+              <div><div style={{ fontSize: 13.5 }}>應付卡費</div><div style={S.sub}>自動算，也可手動校正</div></div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: 15, color: C.amber }}>{nf(totalDue)}</div>
+                <button onClick={openDebtEditor} style={{ background: "none", border: "none", color: C.ink, fontSize: 10.5, fontWeight: 800, padding: "4px 0 0", cursor: "pointer" }}>編輯卡費／分期</button>
+              </div>
+            </div>
+            <div style={{ marginTop: 13, padding: "11px 12px", background: C.bg, borderRadius: 8, fontSize: 11.5, color: C.dim, lineHeight: 1.9 }}>
+              年利息約 <span style={{ color: C.amber }}>{nf(yearInt)}</span> · 月均 {nf(yearInt / 12)}
+              <br />（含質押借款 {nf(pledgeUSD)} U 的利息，本金已在投資淨值扣掉）
+            </div>
+          </div>
+
+          <div style={{ ...S.card, padding: "15px 17px" }}>
+            <div style={{ ...S.lbl, marginBottom: 2 }}>匯率與幣價</div>
+            <div style={S.row}><span style={{ fontSize: 13.5 }}>USD / TWD</span><Num value={d.fx} dec={2} onChange={(v) => save({ ...d, fx: v })} /></div>
+            {["BTC", "ETH", "LINK"].map((s) => (
+              <div key={s} style={S.row}><span style={{ fontSize: 13.5 }}>{s}</span>
+                <Num value={d.px[s]} dec={s === "LINK" ? 2 : 0} onChange={(v) => save({ ...d, px: { ...d.px, [s]: v } })} /></div>
+            ))}
+            <button onClick={() => fetchPx()} disabled={px.busy}
+              style={{ ...S.chip(false, C.ink), width: "100%", borderRadius: 8, padding: "12px", marginTop: 13, opacity: px.busy ? 0.5 : 1 }}>
+              {px.busy ? "更新中…" : "抓即時價格"}
+            </button>
+            <div style={{ marginTop: 9, fontSize: 10.5, color: px.err ? C.out : C.dim, lineHeight: 1.7 }}>
+              {px.err || (d.pxAt ? `最後更新 ${new Date(d.pxAt).toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : "尚未抓過")}
+              <br />CoinGecko · 匯率取 USDT/TWD
+            </div>
+          </div>
+
+          <div style={{ ...S.card, padding: "15px 17px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", marginBottom: 12 }}>
+              <div>
+                <div style={{ ...S.lbl, marginBottom: 5 }}>Google 試算表同步</div>
+                <div style={{ fontSize: 12.5, fontWeight: 800, color: syncStatus.state === "error" ? C.out : syncStatus.state === "synced" ? C.inc : syncStatus.state === "off" ? C.dim : C.amber }}>
+                  {syncStatus.state === "synced" ? "● " : syncStatus.state === "error" ? "● " : syncStatus.state === "off" ? "○ " : "● "}{syncStatus.text}
+                </div>
+              </div>
+              <button onClick={() => { const cfg = cloudConfig(); setModal({ type: "cloud", ...cfg, result: "" }); }} style={{ background: "none", border: "none", color: C.ink, fontSize: 11.5, fontWeight: 850, cursor: "pointer", padding: "2px 0" }}>設定</button>
+            </div>
+            <div style={{ display: "flex", gap: 7 }}>
+              <button onClick={syncNow} style={{ ...S.chip(false, C.teal), flex: 1, borderRadius: 8, padding: "11px" }}>立即同步</button>
+              <button onClick={() => setModal({ type: "confirm", msg: "用 Google 試算表裡的雲端資料覆蓋這支手機？", run: async () => { await pullCloudNow(); } })} style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 8, padding: "11px" }}>從雲端下載</button>
+            </div>
+            <div style={{ marginTop: 10, fontSize: 10.5, color: C.dim, lineHeight: 1.7 }}>
+              設定後，新增、修改、刪除、轉帳與還款都會自動同步。手機仍保留一份本機資料，離線也能先記。
+              {syncStatus.at ? <><br />雲端時間 {new Date(syncStatus.at).toLocaleString("zh-TW", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</> : null}
+            </div>
+          </div>
+
+          <div style={{ ...S.card, padding: "15px 17px" }}>
+            <div style={{ ...S.lbl, marginBottom: 12 }}>備份與重設</div>
+            <div style={{ display: "flex", gap: 7 }}>
+              <button onClick={() => setModal({ type: "backup", text: JSON.stringify(d) })}
+                style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 8, padding: "11px" }}>匯出</button>
+              <button onClick={() => setModal({ type: "restore", text: "" })}
+                style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 8, padding: "11px" }}>匯入</button>
+            </div>
+            <button onClick={() => setModal({ type: "confirm", msg: "重設為最新基準？記帳紀錄會保留。", run: () => save({ ...DEFAULT, tx: d.tx, sharedTx: d.sharedTx, snaps: d.snaps, transfers: d.transfers, exchanges: d.exchanges }) })}
+              style={{ ...S.chip(false, C.ink), width: "100%", borderRadius: 8, padding: "11px", marginTop: 7 }}>
+              重設為最新基準
+            </button>
+            <div style={{ marginTop: 10, fontSize: 10.5, color: C.dim, lineHeight: 1.7 }}>
+              本機資料仍會保留；有設定 Google 試算表同步時，雲端會再多一份。重大修改前仍建議手動匯出。
+            </div>
+          </div>
+        </>)}
+      </div>
+
+      {(tab === "ledger" || tab === "shared") && (
+        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, padding: "12px 13px 20px", background: `linear-gradient(transparent,${C.bg} 28%)` }}>
+          <div style={{ maxWidth: 480, margin: "0 auto", display: "flex", gap: 9 }}>
+            {tab === "ledger" && (
+              <button onClick={() => setModal({ type: "move", from: "c2", to: "c4", fromAmount: "", toAmount: "", date: today(), note: "" })}
+                style={{ width: 112, background: C.card, border: `1px solid ${C.line}`, borderRadius: 15, color: C.text, fontWeight: 800, fontSize: 14.5, padding: "15px 10px", cursor: "pointer", boxShadow: "0 10px 30px rgba(0,0,0,.22)" }}>
+                ⇄ 轉帳
+              </button>
+            )}
+            <button onClick={() => { setEditId(null); if (tab === "shared") { setKind("shared"); setF({ ...f, amount: "", note: "", date: today(), cat: "s_food", method: "c1" }); } else { if (kind === "shared") setKind("expense"); setF({ ...f, amount: "", note: "", date: today(), cat: kind === "income" ? "base" : "food", method: kind === "income" ? "c2" : "c1" }); } setSheet(true); }}
+              style={{ flex: 1, background: tab === "shared" ? C.purple : C.ink, border: "none", borderRadius: 15, color: "#fff", fontWeight: 850, fontSize: 15.5, padding: "15px", cursor: "pointer", boxShadow: "0 10px 30px rgba(0,0,0,.24)" }}>
+              {tab === "shared" ? "＋ 記一筆共同開銷" : "＋ 記一筆"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {modal && (
+        <div onClick={() => setModal(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.68)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 25 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.card, width: "100%", maxWidth: 480, maxHeight: "92vh", overflowY: "auto", borderRadius: "24px 24px 0 0", padding: "20px 17px 26px", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif" }}>
+            <div style={{ ...S.lbl, marginBottom: 15 }}>{{ move: "資金轉帳", transfer: "轉進卡費帳戶", pay: "繳卡費", loanPay: "繳信貸", editDebt: "調整卡費／分期", topup: "存入共同基金", settle: "結算墊款", bizIn: "投入事業", bizOut: "從事業回收", asset: modal.id ? "編輯投資標的" : "新增投資標的", addCoin: "新增 Crypto", account: modal.id ? "編輯帳戶" : "新增帳戶", confirm: "確認", backup: "匯出備份", restore: "匯入備份", cloud: "Google 試算表同步" }[modal.type]}</div>
+
+            {modal.type === "confirm" ? (
+              <>
+                <div style={{ fontSize: 14, lineHeight: 1.8, marginBottom: 20 }}>{modal.msg}</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setModal(null)} style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 10, padding: "14px", fontSize: 14 }}>取消</button>
+                  <button onClick={() => { modal.run(); setModal(null); }}
+                    style={{ flex: 1, background: C.out, border: "none", borderRadius: 10, color: "#fff", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontSize: 14, padding: "14px", cursor: "pointer" }}>確定</button>
+                </div>
+              </>
+            ) : modal.type === "backup" ? (
+              <>
+                <div style={{ fontSize: 12, color: C.dim, marginBottom: 10, lineHeight: 1.8 }}>整段複製起來，存到備忘錄或傳給自己。要還原時用「匯入」貼回去。</div>
+                <textarea readOnly value={modal.text} onClick={(e) => e.target.select()}
+                  style={{ ...S.inp, height: 190, fontSize: 10, lineHeight: 1.5, marginBottom: 15 }} />
+                <button onClick={() => setModal(null)} style={{ ...S.chip(false, C.ink), width: "100%", borderRadius: 10, padding: "14px", fontSize: 14 }}>關閉</button>
+              </>
+            ) : modal.type === "restore" ? (
+              <>
+                <div style={{ fontSize: 12, color: C.out, marginBottom: 10, lineHeight: 1.8 }}>貼上備份內容。這會覆蓋現在所有資料。</div>
+                <textarea value={modal.text} onChange={(e) => setModal({ ...modal, text: e.target.value })} placeholder="貼在這裡"
+                  style={{ ...S.inp, height: 150, fontSize: 10, lineHeight: 1.5, marginBottom: 15 }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setModal(null)} style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 10, padding: "14px", fontSize: 14 }}>取消</button>
+                  <button onClick={() => { try { const j = JSON.parse(modal.text); save(migrateState(j)); setModal(null); } catch (e) { setModal({ ...modal, bad: true }); } }}
+                    style={{ flex: 1, background: C.out, border: "none", borderRadius: 10, color: "#fff", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontSize: 14, padding: "14px", cursor: "pointer" }}>
+                    {modal.bad ? "格式錯誤" : "覆蓋"}
+                  </button>
+                </div>
+              </>
+            ) : modal.type === "cloud" ? (
+              <>
+                <div style={{ fontSize: 11.5, color: C.dim, lineHeight: 1.75, marginBottom: 14 }}>
+                  貼上 Apps Script Web App 的 <b style={{ color: C.text }}>/exec</b> 網址與 API Token。Token 只會存這個網站的本機儲存空間，不會進到記帳資料 JSON。
+                </div>
+                <div style={{ ...S.lbl, marginBottom: 6 }}>Web App API 網址</div>
+                <input value={modal.url || ""} onChange={(e) => setModal({ ...modal, url: e.target.value, result: "" })} placeholder="https://script.google.com/macros/s/.../exec" autoCapitalize="none" autoCorrect="off" style={{ ...S.inp, fontSize: 12, marginBottom: 12 }} />
+                <div style={{ ...S.lbl, marginBottom: 6 }}>API Token</div>
+                <input value={modal.token || ""} onChange={(e) => setModal({ ...modal, token: e.target.value, result: "" })} placeholder="貼上 Code.gs 最上方的 API_TOKEN" autoCapitalize="none" autoCorrect="off" style={{ ...S.inp, fontSize: 12, marginBottom: 10 }} />
+                {modal.result ? <div style={{ padding: "9px 11px", borderRadius: 9, marginBottom: 12, background: modal.resultOk ? "#14241E" : "#261516", color: modal.resultOk ? C.inc : C.out, fontSize: 11.5, lineHeight: 1.6 }}>{modal.result}</div> : null}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => {
+                    clearCloudConfig();
+                    setSyncStatus({ state: "off", text: "尚未設定 Google 試算表同步", at: "" });
+                    setModal(null);
+                  }} style={{ ...S.chip(false, C.out), flex: 0.8, borderRadius: 10, padding: "13px 8px", fontSize: 13 }}>清除</button>
+                  <button disabled={modal.testing} onClick={async () => {
+                    const url = String(modal.url || "").trim();
+                    const token = String(modal.token || "").trim();
+                    if (!url || !token) { setModal({ ...modal, result: "網址和 Token 都要填", resultOk: false }); return; }
+                    saveCloudConfig(url, token);
+                    setModal((m) => ({ ...m, testing: true, result: "測試連線中…", resultOk: true }));
+                    try {
+                      const r = await cloudJsonp("ping");
+                      if (!r?.ok) throw new Error(r?.error || "連線失敗");
+                      setModal((m) => ({ ...m, testing: false, result: "連線成功。現在會把手機資料當成最新版同步上去。", resultOk: true }));
+                      setSyncStatus({ state: "idle", text: "API 已連線", at: "" });
+                      const clean = migrateState(touchSync(d));
+                      setD(clean); await writeBook(clean); scheduleCloudPush(clean, setSyncStatus, 0);
+                    } catch (e) {
+                      setModal((m) => ({ ...m, testing: false, result: e?.message || "連線失敗", resultOk: false }));
+                      setSyncStatus({ state: "error", text: e?.message || "API 連線失敗", at: "" });
+                    }
+                  }} style={{ flex: 2, background: C.teal, border: "none", borderRadius: 10, color: "#07100E", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontSize: 14, fontWeight: 900, padding: "13px 10px", cursor: "pointer", opacity: modal.testing ? 0.6 : 1 }}>
+                    {modal.testing ? "測試中…" : "儲存並測試"}
+                  </button>
+                </div>
+              </>
+            ) : modal.type === "editDebt" ? (
+              <>
+                <div style={{ fontSize: 11.5, color: C.dim, lineHeight: 1.7, marginBottom: 15 }}>
+                  這裡是「校正帳面」：不會扣銀行、不會新增收入支出。國泰一般卡費不含 PCHOME 分期，總應付會由兩者自動相加。
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginBottom: 16 }}>
+                  <label style={{ display: "block" }}>
+                    <div style={{ ...S.lbl, marginBottom: 6 }}>國泰一般卡費</div>
+                    <input inputMode="decimal" value={modal.cathayDue} onChange={(e) => setModal({ ...modal, cathayDue: e.target.value })} style={{ ...S.inp, fontSize: 17, fontWeight: 800, textAlign: "right" }} />
+                  </label>
+                  <label style={{ display: "block" }}>
+                    <div style={{ ...S.lbl, marginBottom: 6 }}>富邦一般卡費</div>
+                    <input inputMode="decimal" value={modal.fubonDue} onChange={(e) => setModal({ ...modal, fubonDue: e.target.value })} style={{ ...S.inp, fontSize: 17, fontWeight: 800, textAlign: "right" }} />
+                  </label>
+                </div>
+                <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 15, marginTop: 2 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 850, marginBottom: 11 }}>PCHOME 分期</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}>
+                    <label style={{ display: "block" }}>
+                      <div style={{ ...S.lbl, marginBottom: 6 }}>剩餘本金</div>
+                      <input inputMode="decimal" value={modal.instAmt} onChange={(e) => setModal({ ...modal, instAmt: e.target.value })} style={{ ...S.inp, fontSize: 17, fontWeight: 800, textAlign: "right" }} />
+                    </label>
+                    <label style={{ display: "block" }}>
+                      <div style={{ ...S.lbl, marginBottom: 6 }}>剩餘期數</div>
+                      <input inputMode="numeric" value={modal.instPeriods} onChange={(e) => setModal({ ...modal, instPeriods: e.target.value })} style={{ ...S.inp, fontSize: 17, fontWeight: 800, textAlign: "right" }} />
+                    </label>
+                    <label style={{ display: "block" }}>
+                      <div style={{ ...S.lbl, marginBottom: 6 }}>每期金額</div>
+                      <input inputMode="decimal" value={modal.instMonthly} onChange={(e) => setModal({ ...modal, instMonthly: e.target.value })} style={{ ...S.inp, fontSize: 17, fontWeight: 800, textAlign: "right" }} />
+                    </label>
+                    <label style={{ display: "block" }}>
+                      <div style={{ ...S.lbl, marginBottom: 6 }}>下一期日期</div>
+                      <input type="date" value={modal.instNextDue} onChange={(e) => setModal({ ...modal, instNextDue: e.target.value })} style={{ ...S.inp, fontSize: 15, fontWeight: 750 }} />
+                    </label>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+                  <button onClick={() => setModal(null)} style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 10, padding: "14px", fontSize: 14 }}>取消</button>
+                  <button onClick={() => {
+                    const cathayTarget = Math.max(0, Number(String(modal.cathayDue || "0").replace(/,/g, "")) || 0);
+                    const fubonTarget = Math.max(0, Number(String(modal.fubonDue || "0").replace(/,/g, "")) || 0);
+                    const instAmt = Math.max(0, Number(String(modal.instAmt || "0").replace(/,/g, "")) || 0);
+                    const instPeriods = Math.max(0, Math.round(Number(modal.instPeriods || 0) || 0));
+                    const instMonthly = Math.max(0, Number(String(modal.instMonthly || "0").replace(/,/g, "")) || 0);
+                    if (instAmt > 0 && instPeriods < 1) { alert("剩餘本金還有金額時，剩餘期數至少要 1 期"); return; }
+                    if (instAmt > 0 && !(instMonthly > 0)) { alert("剩餘本金還有金額時，每期金額要大於 0"); return; }
+                    const currentCathay = due("c_cathay");
+                    const currentFubon = due("c_fubon");
+                    const openCard = {
+                      ...d.openCard,
+                      c_cathay: Number(d.openCard?.c_cathay || 0) + (cathayTarget - currentCathay),
+                      c_fubon: Number(d.openCard?.c_fubon || 0) + (fubonTarget - currentFubon),
+                    };
+                    const loans = (d.loans || []).map((x) => x.id === (pchomeInst?.id || "l2") ? {
+                      ...x,
+                      amt: instAmt,
+                      monthly: instMonthly,
+                      remainingPeriods: instAmt > 0 ? instPeriods : 0,
+                      nextDue: instAmt > 0 ? (modal.instNextDue || x.nextDue || addMonthsYMD(today(), 1, 22)) : null,
+                      dueNow: instAmt > 0 ? Math.min(instMonthly, instAmt) : 0,
+                    } : x);
+                    save({ ...d, openCard, loans });
+                    setModal(null);
+                  }} style={{ flex: 2, background: C.ink, border: "none", borderRadius: 10, color: "#fff", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontSize: 14, fontWeight: 850, padding: "14px", cursor: "pointer" }}>
+                    儲存校正
+                  </button>
+                </div>
+              </>
+            ) : modal.type === "move" ? (
+              <>
+                <div style={{ ...S.lbl, marginBottom: 8 }}>從哪裡</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 16 }}>
+                  {transferAccounts.map((a) => (
+                    <button key={a.id} onClick={() => setModal({ ...modal, from: a.id, to: modal.to === a.id ? "" : modal.to, fromAmount: "", toAmount: "" })}
+                      style={S.chip(modal.from === a.id, a.unit === "U" ? C.teal : C.ink)}>
+                      {a.name} · {nf(a.balance, a.unit === "U" ? 2 : 0)} {a.unit === "U" ? "U" : ""}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ ...S.lbl, marginBottom: 8 }}>轉到哪裡</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 18 }}>
+                  {transferAccounts.filter((a) => a.id !== modal.from).map((a) => (
+                    <button key={a.id} onClick={() => setModal({ ...modal, to: a.id, toAmount: "" })}
+                      style={S.chip(modal.to === a.id, a.unit === "U" ? C.teal : C.ink)}>
+                      {a.name} · {a.unit}
+                    </button>
+                  ))}
+                </div>
+
+                {modal.from && modal.to && (() => {
+                  const from = transferAcct(modal.from), to = transferAcct(modal.to);
+                  const sameTWD = from?.unit === "TWD" && to?.unit === "TWD";
+                  const sameU = from?.unit === "U" && to?.unit === "U";
+                  const sent = parseFloat(modal.fromAmount) || 0;
+                  const received = sameTWD ? sent : (parseFloat(modal.toAmount) || 0);
+                  const u = from?.unit === "U" ? sent : to?.unit === "U" ? received : 0;
+                  const twd = from?.unit === "TWD" ? sent : to?.unit === "TWD" ? received : 0;
+                  const rate = u > 0 && twd > 0 ? twd / u : 0;
+                  const fee = sameU ? Math.max(0, sent - received) : 0;
+                  return (
+                    <>
+                      <div style={{ display: "grid", gridTemplateColumns: sameTWD ? "1fr" : "1fr 1fr", gap: 9, marginBottom: 10 }}>
+                        <div>
+                          <div style={{ ...S.lbl, marginBottom: 7 }}>{from.unit === "TWD" ? "花 / 轉出多少台幣" : "轉出多少 U"}</div>
+                          <input autoFocus inputMode="decimal" placeholder="0" value={modal.fromAmount || ""} onChange={(e) => setModal({ ...modal, fromAmount: e.target.value })}
+                            style={{ ...S.inp, fontSize: 22, fontWeight: 850, textAlign: "center" }} />
+                        </div>
+                        {!sameTWD && <div>
+                          <div style={{ ...S.lbl, marginBottom: 7 }}>{to.unit === "TWD" ? "實際收到多少台幣" : "實際收到多少 U"}</div>
+                          <input inputMode="decimal" placeholder="0" value={modal.toAmount || ""} onChange={(e) => setModal({ ...modal, toAmount: e.target.value })}
+                            style={{ ...S.inp, fontSize: 22, fontWeight: 850, textAlign: "center" }} />
+                        </div>}
+                      </div>
+
+                      <div style={{ padding: "11px 12px", background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12, marginBottom: 12, fontSize: 12, color: C.dim, lineHeight: 1.8 }}>
+                        {from.name} 餘額 {nf(from.balance, from.unit === "U" ? 2 : 0)} {from.unit}
+                        {sent > from.balance && <span style={{ color: C.out }}> · 轉出後會變負數</span>}
+                        {rate > 0 && <><br />實際入金匯率 <span style={{ color: C.text, fontWeight: 800 }}>{nf(rate, 2)} TWD/U</span></>}
+                        {sameU && sent > 0 && received > 0 && <><br />手續費 <span style={{ color: fee > 0 ? C.amber : C.text, fontWeight: 800 }}>{nf(fee, 2)} U</span></>}
+                      </div>
+
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.35fr", gap: 8, marginBottom: 15 }}>
+                        <input type="date" value={modal.date || today()} onChange={(e) => setModal({ ...modal, date: e.target.value })} style={S.inp} />
+                        <input placeholder="備註（可留空）" value={modal.note || ""} onChange={(e) => setModal({ ...modal, note: e.target.value })} style={S.inp} />
+                      </div>
+
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => setModal(null)} style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 12, padding: "14px", fontSize: 14 }}>取消</button>
+                        <button onClick={runTransfer} style={{ flex: 2, background: C.ink, border: "none", borderRadius: 12, color: "#fff", fontWeight: 850, fontSize: 15, padding: "14px", cursor: "pointer" }}>
+                          確認轉帳
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()}
+                {(!modal.from || !modal.to) && <button onClick={() => setModal(null)} style={{ ...S.chip(false, C.ink), width: "100%", borderRadius: 12, padding: "14px" }}>取消</button>}
+              </>
+            ) : modal.type === "account" ? (
+              <>
+                <input autoFocus placeholder="帳戶名稱" value={modal.name} onChange={(e) => setModal({ ...modal, name: e.target.value })} style={{ ...S.inp, marginBottom: 10 }} />
+                <input inputMode="decimal" placeholder="餘額" value={modal.amt} onChange={(e) => setModal({ ...modal, amt: e.target.value })} style={{ ...S.inp, marginBottom: 12 }} />
+                <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                  {["TWD", "USD"].map((c) => (
+                    <button key={c} disabled={modal.lockedRole} onClick={() => setModal({ ...modal, cur: c })} style={{ ...S.chip(modal.cur === c, C.ink), flex: 1, opacity: modal.lockedRole ? .55 : 1 }}>{c}</button>
+                  ))}
+                </div>
+                <button disabled={modal.lockedRole} onClick={() => setModal({ ...modal, excluded: !modal.excluded })}
+                  style={{ ...S.chip(modal.excluded, C.purple), width: "100%", borderRadius: 8, padding: "11px", marginBottom: 10, opacity: modal.lockedRole ? .55 : 1 }}>
+                  {modal.excluded ? "✓ " : ""}不計入淨資產（共用錢包）
+                </button>
+                {modal.lockedRole && <div style={{ color: C.dim, fontSize: 11, lineHeight: 1.7, marginBottom: 12 }}>這是專用帳戶；可改名稱與餘額，但幣別和用途會保留，避免卡費或共同帳計算失效。</div>}
+                {modal.id && !SYSTEM_CASH_IDS.has(modal.id) && <div style={{ color: accountDeleteReason(d.cash.find((x) => x.id === modal.id)) ? C.dim : C.out, fontSize: 11, lineHeight: 1.7, marginBottom: 12 }}>{accountDeleteReason(d.cash.find((x) => x.id === modal.id)) || "這個帳戶目前可以安全刪除。"}</div>}
+                <div style={{ display: "flex", gap: 8 }}>
+                  {modal.id && !SYSTEM_CASH_IDS.has(modal.id) && <button disabled={!!accountDeleteReason(d.cash.find((x) => x.id === modal.id))} onClick={() => setModal({ type: "confirm", msg: `刪除帳戶「${modal.name}」？`, run: () => save({ ...d, cash: d.cash.filter((x) => x.id !== modal.id) }) })} style={{ ...S.chip(false, C.out), borderRadius: 10, padding: "14px 11px", opacity: accountDeleteReason(d.cash.find((x) => x.id === modal.id)) ? .4 : 1 }}>刪除</button>}
+                  <button onClick={() => setModal(null)} style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 10, padding: "14px", fontSize: 14 }}>取消</button>
+                  <button onClick={() => {
+                    const name = String(modal.name || "").trim();
+                    if (!name) return;
+                    const existing = d.cash.find((x) => x.id === modal.id);
+                    const row = {
+                      ...(existing || {}),
+                      id: modal.id || "a" + Date.now(),
+                      name,
+                      amt: parseFloat(modal.amt) || 0,
+                      cur: modal.lockedRole && existing ? existing.cur : modal.cur,
+                      excluded: modal.lockedRole && existing ? existing.excluded : (modal.excluded || undefined),
+                    };
+                    const cash = modal.id ? d.cash.map((x) => x.id === modal.id ? row : x) : [...d.cash, row];
+                    save({ ...d, cash });
+                    setModal(null);
+                  }} style={{ flex: 2, background: C.ink, border: "none", borderRadius: 10, color: "#fff", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontSize: 14, padding: "14px", cursor: "pointer" }}>{modal.id ? "儲存變更" : "新增"}</button>
+                </div>
+              </>
+            ) : modal.type === "asset" ? (
+              <>
+                <div style={{ fontSize: 11.5, color: C.dim, lineHeight: 1.75, marginBottom: 13 }}>任何股票、ETF、基金、債券或實體資產都能自己建立。價格先手動更新，資料會跟你的帳本一起備份與同步。</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1.35fr .75fr", gap: 9, marginBottom: 10 }}>
+                  <label><div style={{ ...S.lbl, marginBottom: 6 }}>標的名稱</div><input autoFocus placeholder="例如 台積電" value={modal.name} onChange={(e) => setModal({ ...modal, name: e.target.value })} style={S.inp} /></label>
+                  <label><div style={{ ...S.lbl, marginBottom: 6 }}>代號</div><input placeholder="2330" value={modal.symbol} onChange={(e) => setModal({ ...modal, symbol: e.target.value.toUpperCase() })} autoCapitalize="characters" style={S.inp} /></label>
+                </div>
+                <div style={{ ...S.lbl, marginBottom: 7 }}>資產類型</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 13 }}>
+                  {ASSET_TYPES.map((x) => <button key={x.k} onClick={() => setModal({ ...modal, assetClass: x.k })} style={{ ...S.chip(modal.assetClass === x.k, x.c), borderRadius: 10, padding: "9px 3px", fontSize: 11.5 }}>{x.n}</button>)}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginBottom: 10 }}>
+                  <label><div style={{ ...S.lbl, marginBottom: 6 }}>券商／帳戶</div><input placeholder="例如 國泰證券" value={modal.account} onChange={(e) => setModal({ ...modal, account: e.target.value })} style={S.inp} /></label>
+                  <label><div style={{ ...S.lbl, marginBottom: 6 }}>資產分組</div><input placeholder="例如 核心持倉" value={modal.group} onChange={(e) => setModal({ ...modal, group: e.target.value })} list="portfolio-groups" style={S.inp} /><datalist id="portfolio-groups">{portfolioGroups.map((x) => <option key={x} value={x} />)}</datalist></label>
+                </div>
+                <div style={{ ...S.lbl, marginBottom: 7 }}>計價幣別</div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 13 }}>
+                  {["TWD", "USD", "USDT"].map((cur) => <button key={cur} onClick={() => setModal({ ...modal, cur })} style={{ ...S.chip(modal.cur === cur, C.ink), flex: 1, borderRadius: 10 }}>{cur}</button>)}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9, marginBottom: 10 }}>
+                  <label><div style={{ ...S.lbl, marginBottom: 6 }}>持有數量</div><input inputMode="decimal" placeholder="0" value={modal.qty} onChange={(e) => setModal({ ...modal, qty: e.target.value })} style={S.inp} /></label>
+                  <label><div style={{ ...S.lbl, marginBottom: 6 }}>目前單價 · {modal.cur}</div><input inputMode="decimal" placeholder="0" value={modal.price} onChange={(e) => setModal({ ...modal, price: e.target.value })} style={S.inp} /></label>
+                </div>
+                <label style={{ display: "block", marginBottom: 12 }}><div style={{ ...S.lbl, marginBottom: 6 }}>平均成本 · {modal.cur}（可留空）</div><input inputMode="decimal" placeholder="0" value={modal.cost} onChange={(e) => setModal({ ...modal, cost: e.target.value })} style={S.inp} /></label>
+                <div style={{ padding: "11px 12px", background: C.bg, borderRadius: 11, marginBottom: 12, color: C.dim, fontSize: 11.5, lineHeight: 1.8 }}>
+                  目前市值 <b style={{ color: C.text }}>{nf((Number(modal.qty || 0) * Number(modal.price || 0)) * (modal.cur === "TWD" ? 1 : d.fx))} TWD</b>
+                  {Number(modal.cost || 0) > 0 && <> · 損益 <b style={{ color: Number(modal.price || 0) >= Number(modal.cost || 0) ? C.inc : C.out }}>{nf((Number(modal.qty || 0) * (Number(modal.price || 0) - Number(modal.cost || 0))) * (modal.cur === "TWD" ? 1 : d.fx))}</b></>}
+                </div>
+                <button onClick={() => setModal({ ...modal, included: !modal.included })} style={{ ...S.chip(modal.included, C.teal), width: "100%", borderRadius: 10, marginBottom: 14 }}>{modal.included ? "✓ 計入個人淨資產" : "不計入個人淨資產"}</button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {modal.id && <button onClick={() => setModal({ type: "confirm", msg: `刪除 ${modal.name || modal.symbol}？`, run: () => save({ ...d, portfolioAssets: (d.portfolioAssets || []).filter((x) => x.id !== modal.id) }) })} style={{ ...S.chip(false, C.out), borderRadius: 10, padding: "14px 12px" }}>刪除</button>}
+                  <button onClick={() => setModal(null)} style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 10, padding: "14px", fontSize: 14 }}>取消</button>
+                  <button onClick={() => {
+                    const name = String(modal.name || "").trim();
+                    const qty = Number(modal.qty || 0), price = Number(modal.price || 0), cost = Number(modal.cost || 0);
+                    if (!name) { alert("請填標的名稱"); return; }
+                    if (!(qty >= 0) || !(price >= 0) || !(cost >= 0)) { alert("數量、價格與成本不能是負數"); return; }
+                    const row = { id: modal.id || "pa" + Date.now(), name, symbol: String(modal.symbol || name).trim().toUpperCase(), assetClass: modal.assetClass || "OTHER", cur: modal.cur || "TWD", qty, price, cost, account: String(modal.account || "").trim(), group: String(modal.group || "").trim() || "未分組", included: modal.included !== false, updatedAt: new Date().toISOString() };
+                    const list = modal.id ? (d.portfolioAssets || []).map((x) => x.id === modal.id ? row : x) : [...(d.portfolioAssets || []), row];
+                    save({ ...d, portfolioAssets: list });
+                    setModal(null);
+                  }} style={{ flex: 2, background: C.ink, border: "none", borderRadius: 10, color: "#fff", fontWeight: 850, fontSize: 14, padding: "14px", cursor: "pointer" }}>{modal.id ? "儲存變更" : "加入資產"}</button>
+                </div>
+              </>
+            ) : modal.type === "addCoin" ? (
+              <>
+                <div style={{ fontSize: 12, color: C.dim, marginBottom: 10 }}>
+                  加到{modal.where === "spot" ? "現貨" : "幣安理財"}
+                </div>
+                {!modal.picked ? (
+                  <>
+                    <input autoFocus placeholder="搜尋幣種，例如 sol、doge" value={search.q}
+                      onChange={(e) => { setSearch((p) => ({ ...p, q: e.target.value })); searchCoin(e.target.value); }}
+                      style={{ ...S.inp, marginBottom: 12 }} />
+                    {search.busy && <div style={{ fontSize: 12, color: C.dim, padding: "8px 0" }}>搜尋中…</div>}
+                    {search.hits.map((c) => (
+                      <button key={c.id} onClick={() => setModal({ ...modal, picked: { sym: (c.symbol || "").toUpperCase(), cg: c.id, name: c.name } })}
+                        style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", borderTop: `1px solid ${C.line}`, padding: "12px 2px", cursor: "pointer", textAlign: "left" }}>
+                        {c.thumb && <img src={c.thumb} alt="" style={{ width: 22, height: 22, borderRadius: 11 }} />}
+                        <span style={{ fontSize: 14, fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif" }}>{(c.symbol || "").toUpperCase()}</span>
+                        <span style={{ fontSize: 12, color: C.dim, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+                      </button>
+                    ))}
+                    {!search.busy && search.q.length >= 2 && search.hits.length === 0 && (
+                      <div style={{ fontSize: 12, color: C.dim, padding: "10px 0", lineHeight: 1.8 }}>找不到。可能是拼法不同，或需要連網。</div>
+                    )}
+                    <button onClick={() => setModal(null)} style={{ ...S.chip(false, C.ink), width: "100%", borderRadius: 10, padding: "13px", fontSize: 14, marginTop: 14 }}>取消</button>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ padding: "12px 13px", background: C.bg, borderRadius: 9, marginBottom: 14, fontSize: 13.5 }}>
+                      {modal.picked.sym} <span style={{ color: C.dim, fontSize: 11.5 }}>{modal.picked.name}</span>
+                      <button onClick={() => setModal({ ...modal, picked: null })} style={{ background: "none", border: "none", color: C.ink, fontSize: 11, cursor: "pointer", float: "right" }}>換一個</button>
+                    </div>
+                    <div style={{ ...S.lbl, marginBottom: 7 }}>數量</div>
+                    <input autoFocus inputMode="decimal" placeholder="0" value={modal.qty} onChange={(e) => setModal({ ...modal, qty: e.target.value })} style={{ ...S.inp, marginBottom: 12 }} />
+                    <div style={{ ...S.lbl, marginBottom: 7 }}>平均成本（USD，不知道就留空）</div>
+                    <input inputMode="decimal" placeholder="0" value={modal.cost} onChange={(e) => setModal({ ...modal, cost: e.target.value })} style={{ ...S.inp, marginBottom: 15 }} />
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => setModal(null)} style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 10, padding: "14px", fontSize: 14 }}>取消</button>
+                      <button onClick={() => {
+                        const q = parseFloat(modal.qty);
+                        if (!(q > 0)) return;
+                        const item = { id: "n" + Date.now(), sym: modal.picked.sym, cg: modal.picked.cg, qty: q, cost: parseFloat(modal.cost) || 0 };
+                        if (modal.where === "collateral") { item.borrow = 0; item.rate = 0; item.liq = 0; }
+                        const next = { ...d, [modal.where]: [...d[modal.where], item] };
+                        save(next);
+                        fetchPx(next);
+                        setModal(null);
+                      }} style={{ flex: 2, background: C.ink, border: "none", borderRadius: 10, color: "#fff", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontSize: 14, padding: "14px", cursor: "pointer" }}>加入</button>
+                    </div>
+                  </>
+                )}
+              </>
+            ) : modal.type === "bizIn" || modal.type === "bizOut" ? (
+              <>
+                <div style={{ ...S.lbl, marginBottom: 8 }}>{modal.type === "bizIn" ? "錢從哪出" : "錢收到哪"}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 15 }}>
+                  {d.cash.filter((c) => !c.earmark && !c.excluded && c.cur === "TWD").map((c) => (
+                    <button key={c.id} onClick={() => setModal({ ...modal, [modal.type === "bizIn" ? "from" : "to"]: c.id })}
+                      style={S.chip((modal.type === "bizIn" ? modal.from : modal.to) === c.id, C.ink)}>{c.name} · {nf(c.amt)}</button>
+                  ))}
+                </div>
+                {modal.type === "bizOut" && (
+                  <>
+                    <div style={{ ...S.lbl, marginBottom: 8 }}>其中毛利（純回本填 0）</div>
+                    <input inputMode="decimal" placeholder="0" value={modal.profit || ""} onChange={(e) => setModal({ ...modal, profit: e.target.value })}
+                      style={{ ...S.inp, marginBottom: 15 }} />
+                  </>
+                )}
+                <div style={{ fontSize: 11.5, color: C.dim, marginBottom: 15, lineHeight: 1.8 }}>
+                  目前在外 {nf(bizOut)}
+                </div>
+              </>
+            ) : modal.type === "topup" ? (
+              <div style={{ fontSize: 12, color: C.dim, marginBottom: 15, lineHeight: 1.8 }}>
+                基金目前 {nf(fund?.amt || 0)}
+                <br />這筆只加進共同基金，不影響你的淨資產。
+              </div>
+            ) : modal.type === "settle" ? (
+              <>
+                <div style={{ ...S.lbl, marginBottom: 8 }}>轉回哪個帳戶</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 15 }}>
+                  {d.cash.filter((c) => !c.earmark && !c.excluded && c.cur === "TWD").map((c) => (
+                    <button key={c.id} onClick={() => setModal({ ...modal, to: c.id })} style={S.chip(modal.to === c.id, C.purple)}>{c.name}</button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 12, color: C.dim, marginBottom: 15, lineHeight: 1.8 }}>
+                  待結算共 {nf(owed)} · 本次最多結算 {nf(Math.min(parseFloat(modal.amount) || 0, owed))}
+                  <br />基金 {nf(fund?.amt || 0)} → 轉出後剩 {nf((fund?.amt || 0) - Math.min(parseFloat(modal.amount) || 0, owed))}
+                </div>
+              </>
+            ) : modal.type === "loanPay" ? (
+              <>
+                <div style={{ padding: "12px 13px", background: C.soft, border: `1px solid ${C.line}`, borderRadius: 12, marginBottom: 14 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 800 }}>{personalLoan?.name || "信貸"}</div>
+                  <div style={{ ...S.sub, lineHeight: 1.8 }}>
+                    本金 {nf(personalLoan?.amt || 0)} · 月付 {nf(personalLoan?.monthly || 0)} · 每月 10 號
+                    <br />剩 {nf(personalLoan?.remainingPeriods || 0)} 期 · 本期應繳 {nf(loanDueNow)}
+                  </div>
+                </div>
+                <div style={{ ...S.lbl, marginBottom: 8 }}>從哪個帳戶扣款</div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                  {["c2", "c4"].map((id) => {
+                    const a = d.cash.find((c) => c.id === id);
+                    if (!a) return null;
+                    return (
+                      <button key={id} onClick={() => setModal({ ...modal, from: id })} style={{ ...S.chip(modal.from === id, C.teal), flex: 1 }}>
+                        {id === "c2" ? "國泰" : "玉山"}<br /><span style={{ fontSize: 10.5, opacity: .8 }}>{nf(a.amt)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: 11.5, color: C.dim, marginBottom: 14, lineHeight: 1.7 }}>
+                  繳款後會自動扣 1 期、減少剩餘本金，並把下一期排到下個月 10 號。這筆不算生活支出。
+                </div>
+              </>
+            ) : modal.type === "transfer" ? (
+              <>
+                <div style={{ ...S.lbl, marginBottom: 8 }}>從哪裡轉</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 17 }}>
+                  {d.cash.filter((c) => !c.earmark && !c.excluded && c.cur === "TWD").map((c) => (
+                    <button key={c.id} onClick={() => setModal({ ...modal, from: c.id })} style={S.chip(modal.from === c.id, C.ink)}>
+                      {c.name} · {nf(c.amt)}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ ...S.lbl, marginBottom: 8 }}>繳哪張</div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 17 }}>
+                  {["c_cathay", "c_fubon"].map((mk) => (
+                    <button key={mk} onClick={() => setModal({ ...modal, card: mk, amount: String(Math.round(payableCard(mk))) })} style={{ ...S.chip(modal.card === mk, C.amber), flex: 1 }}>
+                      {mName(mk)} · {nf(payableCard(mk))}{mk === "c_cathay" && cardInstDue("c_cathay") > 0 ? `（含分期 ${nf(cardInstDue("c_cathay"))}）` : ""}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ ...S.lbl, marginBottom: 8 }}>從哪個帳戶扣款</div>
+                <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+                  {["c2", "c3"].map((id) => {
+                    const a = d.cash.find((c) => c.id === id);
+                    if (!a) return null;
+                    return (
+                      <button key={id} onClick={() => setModal({ ...modal, from: id })} style={{ ...S.chip(modal.from === id, C.teal), flex: 1 }}>
+                        {id === "c2" ? "國泰" : "國泰卡費帳戶"}<br /><span style={{ fontSize: 10.5, opacity: .8 }}>{nf(a.amt)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: 11.5, color: C.dim, marginBottom: 14, lineHeight: 1.7 }}>選擇付款來源後，只會扣該帳戶；繳卡費不列入本月支出。國泰每月 22 號、富邦每月 4 號。國泰分期繳掉後會扣本金與期數，下一期自動排到下個月。</div>
+              </>
+            )}
+
+            {!["move", "editDebt", "asset", "addCoin", "account", "confirm", "backup", "restore"].includes(modal.type) && (
+              <input autoFocus inputMode="decimal" value={modal.amount} onChange={(e) => setModal({ ...modal, amount: e.target.value })}
+                style={{ ...S.inp, fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Display','PingFang TC','Noto Sans TC',sans-serif", fontWeight: 800, fontSize: 30, textAlign: "center", padding: "13px", marginBottom: 17 }} />
+            )}
+
+            {!["move", "editDebt", "asset", "addCoin", "account", "confirm", "backup", "restore"].includes(modal.type) && <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setModal(null)} style={{ ...S.chip(false, C.ink), flex: 1, borderRadius: 10, padding: "14px", fontSize: 14 }}>取消</button>
+              <button onClick={() => {
+                const amt = parseFloat(modal.amount);
+                if (!(amt > 0)) return;
+                if (modal.type === "bizIn") {
+                  if (!modal.from) return;
+                  save({ ...d, cash: d.cash.map((c) => (c.id === modal.from ? { ...c, amt: c.amt - amt } : c)),
+                    biz: { ...biz, invested: biz.invested + amt, log: [{ id: "b" + Date.now(), type: "in", amount: amt, profit: 0, date: today(), note: "" }, ...(biz.log || [])] } });
+                  setModal(null); return;
+                }
+                if (modal.type === "bizOut") {
+                  if (!modal.to) return;
+                  const pf = parseFloat(modal.profit) || 0;
+                  save({ ...d, cash: d.cash.map((c) => (c.id === modal.to ? { ...c, amt: c.amt + amt } : c)),
+                    biz: { ...biz, recovered: biz.recovered + amt, profit: biz.profit + pf, log: [{ id: "b" + Date.now(), type: "out", amount: amt, profit: pf, date: today(), note: "" }, ...(biz.log || [])] } });
+                  setModal(null); return;
+                }
+                if (modal.type === "topup") {
+                  save({ ...d, cash: d.cash.map((c) => (c.excluded ? { ...c, amt: c.amt + amt } : c)) });
+                  setModal(null); return;
+                }
+                if (modal.type === "settle") {
+                  if (!modal.to) return;
+                  const settleAmt = Math.min(amt, owed);
+                  if (!(settleAmt > 0)) return;
+                  save({ ...d,
+                    cash: d.cash.map((c) => c.excluded ? { ...c, amt: c.amt - settleAmt } : c.id === modal.to ? { ...c, amt: c.amt + settleAmt } : c),
+                    sharedTx: settleShared(d.sharedTx || [], settleAmt) });
+                  setModal(null); return;
+                }
+                if (modal.type === "loanPay") {
+                  if (!modal.from || !["c2", "c4"].includes(modal.from) || !personalLoan) return;
+                  const source = d.cash.find((c) => c.id === modal.from);
+                  if (!source || Number(source.amt || 0) < amt) { alert("這個帳戶餘額不足"); return; }
+                  const oneTerm = Math.min(Number(personalLoan.monthly || 0), Number(personalLoan.amt || 0));
+                  if (amt + 0.001 < oneTerm) { alert(`本期至少要繳 ${nf(oneTerm)}`); return; }
+                  const paid = Math.min(amt, Number(personalLoan.amt || 0));
+                  const newAmt = Math.max(0, Number(personalLoan.amt || 0) - paid);
+                  const periodsPaid = oneTerm > 0 ? 1 : 0;
+                  const nextDue = newAmt > 0 ? addMonthsYMD(personalLoan.nextDue || today(), periodsPaid, personalLoan.dueDay || 10) : null;
+                  const loans2 = d.loans.map((x) => x.id === personalLoan.id ? {
+                    ...x, amt: newAmt,
+                    remainingPeriods: Math.max(0, Number(x.remainingPeriods || 0) - periodsPaid),
+                    nextDue,
+                  } : x);
+                  save({ ...d,
+                    cash: d.cash.map((c) => c.id === modal.from ? { ...c, amt: Number(c.amt || 0) - paid } : c),
+                    loans: loans2,
+                    tx: [{ id: "lp" + Date.now(), kind: "loan_payment", amount: paid, loanId: personalLoan.id, periodsPaid, payFrom: modal.from, cat: "loan_pay", date: today(), note: `${mName(modal.from)}繳信貸` }, ...d.tx]
+                  });
+                  setModal(null); return;
+                }
+                if (modal.type === "transfer") {
+                  if (!modal.from) return;
+                  save({ ...d, cash: d.cash.map((c) => c.id === modal.from ? { ...c, amt: c.amt - amt } : c.earmark ? { ...c, amt: c.amt + amt } : c) });
+                } else {
+                  if (!modal.from || !["c2", "c3"].includes(modal.from)) return;
+                  const source = d.cash.find((c) => c.id === modal.from);
+                  if (!source || Number(source.amt || 0) < amt) { alert("這個帳戶餘額不足"); return; }
+
+                  const regularDue = Math.max(0, due(modal.card));
+                  const installmentWanted = cardInstDue(modal.card);
+                  const afterRegular = Math.max(0, amt - regularDue);
+                  // 只有真的把本期分期繳足，才扣一期，避免部分付款造成期數亂掉。
+                  const instPart = installmentWanted > 0 && afterRegular + 0.001 >= installmentWanted ? installmentWanted : 0;
+                  const cardPart = Math.max(0, amt - instPart);
+                  let instLeft = instPart;
+                  let instPeriodsPaid = 0;
+                  const loans2 = d.loans.map((x) => {
+                    const isThisCardInst = (x.type === "card_installment" || x.card) && (x.card || "c_cathay") === modal.card;
+                    if (!isThisCardInst || !(instLeft > 0)) return x;
+                    const xDue = installmentDueFor(x);
+                    if (!(xDue > 0)) return x;
+                    const paid = Math.min(instLeft, Number(x.amt || 0), xDue);
+                    instLeft -= paid;
+                    const monthly = Number(x.monthly || 0);
+                    const cycles = dueCyclesFor(x);
+                    const periodsPaid = monthly > 0 ? Math.min(cycles, Math.max(1, Math.ceil((paid - 0.001) / monthly))) : 0;
+                    instPeriodsPaid += periodsPaid;
+                    const newAmt = Math.max(0, Number(x.amt || 0) - paid);
+                    return {
+                      ...x,
+                      amt: newAmt,
+                      dueNow: newAmt > 0 ? Math.min(monthly, newAmt) : 0,
+                      remainingPeriods: Math.max(0, Number(x.remainingPeriods || Math.ceil(Number(x.amt || 0) / (monthly || 1))) - periodsPaid),
+                      nextDue: newAmt > 0 ? addMonthsYMD(x.nextDue || today(), periodsPaid, x.dueDay || 22) : null,
+                    };
+                  });
+                  save({ ...d,
+                    cash: d.cash.map((c) => c.id === modal.from ? { ...c, amt: Number(c.amt || 0) - amt } : c),
+                    loans: loans2,
+                    tx: [{ id: "p" + Date.now(), kind: "payment", amount: amt, cardAmount: cardPart, installmentAmount: instPart, installmentPeriodsPaid: instPeriodsPaid, installmentLoanId: instPart > 0 ? "l2" : undefined, method: modal.card, payFrom: modal.from, cat: "pay", date: today(), note: `${mName(modal.from)}繳${mName(modal.card)}卡費${instPart > 0 ? `（含分期 ${nf(instPart)}）` : ""}` }, ...d.tx]
+                  });
+                }
+                setModal(null);
+              }} style={{ flex: 2, background: C.ink, border: "none", borderRadius: 10, color: "#fff", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontSize: 14, padding: "14px", cursor: "pointer" }}>
+                確認
+              </button>
+            </div>}
+          </div>
+        </div>
+      )}
+
+      {sheet && (
+        <div onClick={() => { setSheet(false); setEditId(null); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.68)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.card, width: "100%", maxWidth: 480, borderRadius: "24px 24px 0 0", padding: "18px 17px 26px", maxHeight: "88vh", overflowY: "auto", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif" }}>
+            {editId && kind !== "shared" && <div style={{ padding: "11px 13px", background: "#111B31", border: `1px solid ${C.ink}55`, borderRadius: 12, fontSize: 12.5, color: "#B9C8FF", marginBottom: 12, lineHeight: 1.7 }}>
+              ✎ 正在修改既有帳目。金額、分類、帳戶、日期、備註都可以改，儲存後會自動回沖舊帳。
+            </div>}
+            {kind === "shared" ? (
+              <div style={{ padding: "11px 13px", background: "#1E1828", borderRadius: 12, fontSize: 12.5, color: "#D8C7F4", marginBottom: 16, lineHeight: 1.7 }}>
+                共同開銷 — 你先付，結算時從共同基金拿回來
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 7, marginBottom: 16 }}>
+                <button onClick={() => { setKind("expense"); setF({ ...f, cat: "food", method: "c1" }); }} style={{ ...S.chip(kind === "expense", C.out), flex: 1, borderRadius: 8, padding: "10px" }}>支出</button>
+                <button onClick={() => { setKind("income"); setF({ ...f, cat: "base", method: "c2" }); }} style={{ ...S.chip(kind === "income", C.inc), flex: 1, borderRadius: 8, padding: "10px" }}>收入</button>
+              </div>
+            )}
+            <input autoFocus inputMode="decimal" placeholder="0" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })}
+              style={{ ...S.inp, fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Display','PingFang TC','Noto Sans TC',sans-serif", fontWeight: 800, fontSize: 34, textAlign: "center", padding: "14px", marginBottom: 16 }} />
+            <div style={{ ...S.lbl, marginBottom: 8 }}>分類</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+              {(kind === "income" ? INCOME_CATS : kind === "shared" ? SHARED_CATS : CATS).map((c) => <button key={c.k} onClick={() => setF({ ...f, cat: c.k })} style={S.chip(f.cat === c.k, kind === "shared" ? C.purple : C.ink)}>{c.n}</button>)}
+            </div>
+            <div style={{ ...S.lbl, marginBottom: 8 }}>{kind === "income" ? "進到哪" : "怎麼付"}</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+              {methods.filter((m) => (kind === "income" ? !m.card : true)).map((m) => (
+                <button key={m.k} onClick={() => setF({ ...f, method: m.k })} style={S.chip(f.method === m.k, m.card ? C.amber : C.ink)}>
+                  {m.n}{!m.card && m.cur === "TWD" ? ` · ${nf(m.amt)}` : ""}
+                </button>
+              ))}
+            </div>
+            {kind !== "income" && isCard(f.method) && (
+              <div style={{ padding: "10px 12px", background: "#241D10", borderRadius: 12, fontSize: 12.5, color: "#F1C86C", marginBottom: 16, lineHeight: 1.7 }}>刷卡 — 這筆會加到應付卡費，記得轉錢進卡費帳戶</div>
+            )}
+            {kind !== "income" && !isCard(f.method) && parseFloat(f.amount) > (methods.find((m) => m.k === f.method)?.amt ?? 0) && (
+              <div style={{ padding: "10px 12px", background: "#261516", borderRadius: 12, fontSize: 12.5, color: "#FF9A9A", marginBottom: 16, lineHeight: 1.7 }}>
+                這個帳戶只剩 {nf(methods.find((m) => m.k === f.method)?.amt ?? 0)}，記下去會變負數
+              </div>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 8, marginBottom: 18 }}>
+              <input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} style={S.inp} />
+              <input placeholder="備註" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} style={S.inp} />
+            </div>
+            <button onClick={add} style={{ width: "100%", background: kind === "income" ? C.inc : C.out, border: "none", borderRadius: 10, color: "#fff", fontFamily: "-apple-system,BlinkMacSystemFont,'SF Pro Text','PingFang TC','Noto Sans TC',sans-serif", fontSize: 15, fontWeight: 850, padding: "14px", cursor: "pointer" }}>{editId ? "儲存修改" : "存下來"}</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+// 元件內的執行期錯誤也攔下來顯示
+class Boundary extends React.Component {
+  constructor(p) { super(p); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err, info) {
+    showErr("畫面出錯了", (err && err.message) + "\n\n" + ((info && info.componentStack) || "").slice(0, 500));
+  }
+  render() { return this.state.err ? null : this.props.children; }
+}
+
+try {
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <Boundary><App /></Boundary>
+  );
+} catch (e) {
+  showErr("啟動失敗", (e && e.message) + "\n\n" + ((e && e.stack) || "").slice(0, 600));
+}
+}
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
+}
+</script>
+</body>
+</html>
