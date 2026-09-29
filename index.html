@@ -129,7 +129,7 @@ const adjust = (cash, method, delta) =>
   isCard(method) ? cash : cash.map((c) => (c.id === method ? { ...c, amt: c.amt + delta } : c));
 
 const DEFAULT = {
-  v: 41,
+  v: 42,
   sync: { updatedAt: "", rev: 0 },
   biz: { name: "卡牌", invested: 0, recovered: 0, profit: 0, share: null, log: [] },
   sharedTx: [],
@@ -161,6 +161,77 @@ const DEFAULT = {
   portfolioAssets: [],
   categoryDefs: DEFAULT_CATEGORY_DEFS,
 };
+
+// 使用者已明確同意把這份財務快照發布到 GitHub，供其他裝置一次性匯入。
+// publishedFinancialRev 會寫進本機資料；相同版本只套用一次，避免每次開啟都覆蓋手機後續修改。
+const PUBLISHED_FINANCIAL_REV = "2026-09-30-financial-snapshot-1";
+const PUBLISHED_FINANCIAL_SNAPSHOT = {
+  biz: {
+    name: "卡牌", invested: 200000, recovered: 0, profit: 0, share: null,
+    log: [{ id: "biz_card_initial_20260930", type: "in", amount: 200000, profit: 0, date: "2026-09-30", note: "初始盤點" }],
+  },
+  snaps: [{ date: "2026-09-30", net: 103294.76410940941, debt: 360134.5563589381 }],
+  tx: [
+    { id: "lp_2026_09_10", kind: "loan_payment", amount: 4120, loanId: "l1", periodsPaid: 1, payFrom: "c2", cat: "loan_pay", date: "2026-09-10", note: "分期信貸當期還款（依截圖）" },
+    { id: "lp_2026_08_10", kind: "loan_payment", amount: 4120, loanId: "l1", periodsPaid: 1, payFrom: "c2", cat: "loan_pay", date: "2026-08-10", note: "分期信貸當期還款（依截圖）" },
+    { id: "lp_2026_07_12", kind: "loan_payment", amount: 1728, loanId: "l1", periodsPaid: 1, payFrom: "c2", cat: "loan_pay", date: "2026-07-12", note: "分期信貸首期還款（依截圖）" },
+  ],
+  fx: 31.854867333333335,
+  px: { BTC: 83038, ETH: 2674.66, LINK: 14.693, USDT: 1 },
+  cash: [
+    { id: "c1", name: "現金", amt: 0, cur: "TWD" },
+    { id: "c2", name: "國泰主帳戶", amt: 0, cur: "TWD" },
+    { id: "c3", name: "國泰卡費帳戶", amt: 0, cur: "TWD", earmark: true },
+    { id: "c4", name: "玉山", amt: 0, cur: "TWD" },
+    { id: "c7", name: "共同基金", amt: 0, cur: "TWD", excluded: true, note: "共同資金 · 不計入個人淨資產" },
+    { id: "c5", name: "國泰外幣活存", amt: 0, cur: "USD" },
+  ],
+  exchanges: [
+    { id: "ex_binance", name: "幣安", u: 0 },
+    { id: "ex_pionex", name: "派網", u: 0 },
+  ],
+  spot: [
+    { id: "spot_binance_eth_earn", sym: "ETH", cg: "ethereum", qty: 1.81082013, cost: 0, note: "Binance 理財活期；2026-09-30 依截圖匯入" },
+    { id: "spot_binance_btc_earn", sym: "BTC", cg: "bitcoin", qty: 0.07161981, cost: 0, note: "Binance 理財活期；2026-09-30 依截圖匯入" },
+  ],
+  bots: [
+    { id: "bot_mstrx_usdt_grid", name: "MSTRX/USDT 合約網格", sym: "MSTRX", mode: "usd", principal: 2124.36, pnl: 295.27, valueUSD: 2419.63, principalQty: 0, pnlQty: 0, qty: 0, leverage: 3, note: "做多 3x；區間 100–180／40 格；開單 138.86；強平 78.75；額外保證金 115.37 USDT；2026-09-03 23:02 建立" },
+    { id: "bot_link_coin_grid", name: "LINK 幣本位合約網格", sym: "LINK", cg: "chainlink", mode: "coin", principalQty: 79.5454, pnlQty: 11.52, qty: 91.0654, leverage: 3, principal: 0, pnl: 11.52, valueUSD: 0, note: "做多 3x；區間 12–18／40 格；開單 11.437；強平 8.591；額外保證金 52.89 LINK；2026-09-01 02:20 建立" },
+  ],
+  cryptoLoans: [
+    { id: "crypto_loan_binance_usdt", name: "USDT 活期利率貸款", platform: "Binance", sym: "USDT", amount: 3679.07846335, rate: 5.14, note: "2026-09-30 依 Binance 理財截圖匯入" },
+  ],
+  loans: [
+    { id: "l1", type: "personal_loan", name: "分期信貸", cur: "TWD", originalAmt: 250000, amt: 242938, rate: 5.8, monthly: 4120, dueDay: 10, nextDue: "2026-10-10", note: "2026-07-02 撥款 248,512；開辦費 1,488；依 09/10 後截圖餘額匯入" },
+  ],
+  pxSource: "Binance + Coinbase",
+  pxAt: "2026-09-29T17:02:45.325Z",
+};
+
+const mergePublishedRows = (current, published, key = "id") => {
+  const local = Array.isArray(current) ? current : [];
+  const incoming = Array.isArray(published) ? published : [];
+  const incomingKeys = new Set(incoming.map((x) => x[key]));
+  return [...incoming, ...local.filter((x) => !incomingKeys.has(x[key]))];
+};
+
+const applyPublishedFinancialSnapshot = (state) => ({
+  ...state,
+  publishedFinancialRev: PUBLISHED_FINANCIAL_REV,
+  biz: { ...state.biz, ...PUBLISHED_FINANCIAL_SNAPSHOT.biz, log: mergePublishedRows(state.biz?.log, PUBLISHED_FINANCIAL_SNAPSHOT.biz.log) },
+  snaps: mergePublishedRows(state.snaps, PUBLISHED_FINANCIAL_SNAPSHOT.snaps, "date"),
+  tx: mergePublishedRows(state.tx, PUBLISHED_FINANCIAL_SNAPSHOT.tx),
+  fx: PUBLISHED_FINANCIAL_SNAPSHOT.fx,
+  px: { ...state.px, ...PUBLISHED_FINANCIAL_SNAPSHOT.px },
+  cash: mergePublishedRows(state.cash, PUBLISHED_FINANCIAL_SNAPSHOT.cash),
+  exchanges: mergePublishedRows(state.exchanges, PUBLISHED_FINANCIAL_SNAPSHOT.exchanges),
+  spot: mergePublishedRows(state.spot, PUBLISHED_FINANCIAL_SNAPSHOT.spot),
+  bots: mergePublishedRows(state.bots, PUBLISHED_FINANCIAL_SNAPSHOT.bots),
+  cryptoLoans: mergePublishedRows(state.cryptoLoans, PUBLISHED_FINANCIAL_SNAPSHOT.cryptoLoans),
+  loans: mergePublishedRows(state.loans, PUBLISHED_FINANCIAL_SNAPSHOT.loans),
+  pxSource: PUBLISHED_FINANCIAL_SNAPSHOT.pxSource,
+  pxAt: PUBLISHED_FINANCIAL_SNAPSHOT.pxAt,
+});
 
 const SYMC = { BTC: "#C08A2E", ETH: "#1F3A5F", LINK: "#2E6E7E", USDT: "#A8AEB5", SOL: "#6B8E6B", BNB: "#B8952E", XRP: "#4A6C8C", ADA: "#3E6B8A", DOGE: "#B39247" };
 const PALETTE = [C.purple, "#5A7D8C", "#8C6B5A", "#5A8C6B", "#8C5A6B", "#6B5A8C"];
@@ -260,6 +331,7 @@ const normalizeShared = (t) => {
 
 const migrateState = (st = {}) => {
   const priorV = Number(st.v || 0);
+  const needsPublishedFinancialSnapshot = st.publishedFinancialRev !== PUBLISHED_FINANCIAL_REV;
   let next = {
     ...DEFAULT,
     ...st,
@@ -285,9 +357,9 @@ const migrateState = (st = {}) => {
     snaps: Array.isArray(st.snaps) ? st.snaps : DEFAULT.snaps,
   };
 
-  // Historical user-specific corrections were intentionally removed before GitHub import.
-  // Existing v39 cloud/local states are preserved by the additive merge above.
-  // Structural v39 fields are supplied by DEFAULT without injecting user-specific balances.
+  // v39–v41 結構仍由 DEFAULT 以加法遷移；使用者授權發布的財務快照則依版本只套用一次。
+  // 相同 ID 的已知資產與負債更新成快照值，手機上的其他自訂資料仍保留。
+  if (needsPublishedFinancialSnapshot) next = applyPublishedFinancialSnapshot(next);
   return next;
 };
 
